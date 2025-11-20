@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Gestão Financeira - Painel pessoal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="layout">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo-icon">💰</div>
+          <div class="logo-text">
+            <strong>Gestão Financeira</strong>
+            <span>Painel pessoal</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="menu-item active" data-page="dashboard">
+            Dashboard
+          </button>
+          <button class="menu-item" data-page="lancamentos">
+            Lançamentos
+          </button>
+          <button class="menu-item" data-page="cartoes">
+            Cartões de crédito
+          </button>
+          <button class="menu-item" data-page="param-receita">
+            Parâmetros de Receita
+          </button>
+          <button class="menu-item" data-page="param-despesa">
+            Parâmetros de Despesa
+          </button>
+        </nav>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="content">
+        <!-- DASHBOARD -->
+        <section class="page visible" id="page-dashboard">
+          <h1>Dashboard</h1>
+
+          <div class="dashboard-cards">
+  <div class="card card-metric">
+    <div class="metric-header">
+      <span class="metric-icon">💵</span>
+      <span class="metric-title">Caixa</span>
+    </div>
+    <p id="dash-total-receitas">R$ 0,00</p>
+  </div>
+
+  <div class="card card-metric">
+    <div class="metric-header">
+      <span class="metric-icon">📆</span>
+      <span class="metric-title">Caixa mensal</span>
+    </div>
+    <p id="dash-total-despesas">R$ 0,00</p>
+  </div>
+
+  <div class="card card-metric">
+    <div class="metric-header">
+      <span class="metric-icon">📊</span>
+      <span class="metric-title">Fechamento anual</span>
+    </div>
+    <p id="dash-saldo">R$ 0,00</p>
+  </div>
+</div>
+
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Fluxo de caixa mensal</h3>
+                <p class="card-subtitle">Receitas x Despesas por mês</p>
+              </div>
+              <div class="dash-filters">
+                <label>
+                  Ano
+                  <select id="filter-year" multiple size="4"></select>
+                </label>
+                <label>
+                  Meses
+                  <select id="filter-months" multiple size="4">
+                    <option value="1">Jan</option>
+                    <option value="2">Fev</option>
+                    <option value="3">Mar</option>
+                    <option value="4">Abr</option>
+                    <option value="5">Mai</option>
+                    <option value="6">Jun</option>
+                    <option value="7">Jul</option>
+                    <option value="8">Ago</option>
+                    <option value="9">Set</option>
+                    <option value="10">Out</option>
+                    <option value="11">Nov</option>
+                    <option value="12">Dez</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="chart-wrapper">
+              <canvas id="chart-receitas-despesas"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- LANÇAMENTOS -->
+        <section class="page" id="page-lancamentos">
+          <h1>Lançamentos</h1>
+
+          <div class="grid-2">
+            <!-- FORM RECEITAS -->
+            <div class="card">
+              <h3>Nova receita</h3>
+              <form id="form-receita" class="form-grid">
+                <label>
+                  Descrição
+                  <input type="text" name="description" required />
+                </label>
+                <label>
+                  Categoria
+                  <input
+                    type="text"
+                    name="category"
+                    list="dl-categorias-receita"
+                  />
+                  <datalist id="dl-categorias-receita"></datalist>
+                </label>
+                <label>
+                  Conta
+                  <input
+                    type="text"
+                    name="account"
+                    list="dl-contas-receita"
+                  />
+                  <datalist id="dl-contas-receita"></datalist>
+                </label>
+                <label>
+                  Forma de pagamento
+                  <input
+                    type="text"
+                    name="payment_method"
+                    list="dl-fp-receita"
+                  />
+                  <datalist id="dl-fp-receita"></datalist>
+                </label>
+                <label>
+                  Vencimento
+                  <input type="date" name="due_date" required />
+                </label>
+                <label>
+                  Pagamento
+                  <input type="date" name="payment_date" />
+                </label>
+                <label>
+                  Valor total
+                  <input
+                    type="number"
+                    name="amount_total"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </label>
+                <label>
+                  Parcelas
+                  <input
+                    type="number"
+                    name="installments"
+                    min="1"
+                    value="1"
+                  />
+                </label>
+                <label class="full">
+                  Observação
+                  <textarea name="notes" rows="2"></textarea>
+                </label>
+                <div class="form-actions full">
+                  <button type="submit">Salvar receita</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- FORM DESPESAS -->
+            <div class="card">
+              <h3>Nova despesa</h3>
+              <form id="form-despesa" class="form-grid">
+                <label>
+                  Descrição
+                  <input type="text" name="description" required />
+                </label>
+                <label>
+                  Categoria
+                  <input
+                    type="text"
+                    name="category"
+                    list="dl-categorias-despesa"
+                  />
+                  <datalist id="dl-categorias-despesa"></datalist>
+                </label>
+                <label>
+                  Conta
+                  <input
+                    type="text"
+                    name="account"
+                    list="dl-contas-despesa"
+                  />
+                  <datalist id="dl-contas-despesa"></datalist>
+                </label>
+                <label>
+                  Forma de pagamento
+                  <input
+                    type="text"
+                    name="payment_method"
+                    list="dl-fp-despesa"
+                  />
+                  <datalist id="dl-fp-despesa"></datalist>
+                </label>
+                <label>
+                  Vencimento
+                  <input type="date" name="due_date" required />
+                </label>
+                <label>
+                  Pagamento
+                  <input type="date" name="payment_date" />
+                </label>
+                <label>
+                  Valor total
+                  <input
+                    type="number"
+                    name="amount_total"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </label>
+                <label>
+                  Parcelas
+                  <input
+                    type="number"
+                    name="installments"
+                    min="1"
+                    value="1"
+                  />
+                </label>
+                <label class="full">
+                  Observação
+                  <textarea name="notes" rows="2"></textarea>
+                </label>
+                <div class="form-actions full">
+                  <button type="submit">Salvar despesa</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- TABELAS RECEITA / DESPESA -->
+          <div class="grid-2">
+            <!-- RECEITAS -->
+            <div class="card">
+              <div class="table-header">
+                <h3>Receitas</h3>
+                <div class="table-actions">
+                  <button id="btn-edit-receita" disabled>Editar</button>
+                  <button id="btn-delete-receita" disabled>Excluir</button>
+                </div>
+              </div>
+
+              <table id="table-receitas" class="data-table">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="chk-all-receitas" /></th>
+                    <th>Vencimento</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Valor</th>
+                    <th>Pago em</th>
+                  </tr>
+                  <tr class="filters-row">
+                    <th></th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="receitas"
+                        data-field="due_date"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="receitas"
+                        data-field="description"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="receitas"
+                        data-field="category"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="receitas"
+                        data-field="amount_total"
+                        placeholder="≥ valor"
+                      />
+                    </th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <!-- DESPESAS -->
+            <div class="card">
+              <div class="table-header">
+                <h3>Despesas</h3>
+                <div class="table-actions">
+                  <button id="btn-edit-despesa" disabled>Editar</button>
+                  <button id="btn-delete-despesa" disabled>Excluir</button>
+                </div>
+              </div>
+
+              <table id="table-despesas" class="data-table">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="chk-all-despesas" /></th>
+                    <th>Vencimento</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Valor</th>
+                    <th>Pago em</th>
+                  </tr>
+                  <tr class="filters-row">
+                    <th></th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="despesas"
+                        data-field="due_date"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="despesas"
+                        data-field="description"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="despesas"
+                        data-field="category"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="despesas"
+                        data-field="amount_total"
+                        placeholder="≥ valor"
+                      />
+                    </th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- CARTÕES DE CRÉDITO -->
+        <section class="page" id="page-cartoes">
+          <h1>Cartões de crédito</h1>
+
+          <div class="grid-2">
+            <!-- CADASTRO CARTÃO -->
+            <div class="card">
+              <h3>Novo cartão</h3>
+              <form id="form-cartao" class="form-grid">
+                <label>
+                  Nome do cartão
+                  <input type="text" name="name" required />
+                </label>
+                <label>
+                  Dia fechamento
+                  <input
+                    type="number"
+                    name="closing_day"
+                    min="1"
+                    max="31"
+                    required
+                  />
+                </label>
+                <label>
+                  Dia vencimento
+                  <input
+                    type="number"
+                    name="due_day"
+                    min="1"
+                    max="31"
+                    required
+                  />
+                </label>
+                <label>
+                  Limite total
+                  <input
+                    type="number"
+                    name="limit_total"
+                    step="0.01"
+                    min="0"
+                  />
+                </label>
+                <label>
+                  Anuidade
+                  <input
+                    type="number"
+                    name="annual_fee"
+                    step="0.01"
+                    min="0"
+                  />
+                </label>
+                <label>
+                  Status
+                  <select name="status">
+                    <option value="ativo" selected>Ativo</option>
+                    <option value="inativo">Inativo</option>
+                  </select>
+                </label>
+                <div class="form-actions full">
+                  <button type="submit">Salvar cartão</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- LANÇAMENTO COMPRA CARTÃO -->
+            <div class="card">
+              <h3>Novo lançamento de cartão</h3>
+              <form id="form-transacao-cartao" class="form-grid">
+                <label>
+                  Data da compra
+                  <input
+                    type="date"
+                    name="purchase_date"
+                    required
+                  />
+                </label>
+                <label>
+                  Cartão
+                  <select
+                    id="select-cartao-transacao"
+                    name="credit_card_id"
+                    required
+                  >
+                    <option value="">Selecione um cartão</option>
+                  </select>
+                </label>
+                <label>
+                  Descrição
+                  <input type="text" name="description" required />
+                </label>
+                <label>
+                  Valor total
+                  <input
+                    type="number"
+                    name="amount_total"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </label>
+                <label>
+                  Parcelas
+                  <input
+                    type="number"
+                    name="installments"
+                    min="1"
+                    value="1"
+                    required
+                  />
+                </label>
+                <input
+                  type="hidden"
+                  name="installment_n"
+                  value="1"
+                />
+                <div class="form-actions full">
+                  <button type="submit">Salvar lançamento</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+<div class="card">
+  <h3>Resumo por cartão</h3>
+  <div class="grid-2">
+    <div>
+      <h4>Gasto por cartão</h4>
+      <canvas id="chart-gasto-cartao"></canvas>
+    </div>
+    <div>
+      <h4>Limite disponível por cartão</h4>
+      <canvas id="chart-limite-cartao"></canvas>
+    </div>
+  </div>
+</div>
+
+
+          <div class="grid-2">
+            <!-- LISTA CARTÕES -->
+            <div class="card">
+  <div class="table-header">
+    <h3>Cartões cadastrados</h3>
+    <div class="table-actions">
+      <button id="btn-edit-cartao" disabled>Editar</button>
+      <button id="btn-delete-cartao" disabled>Excluir</button>
+    </div>
+  </div>
+
+  <table id="table-cartoes" class="data-table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="chk-all-cartoes" /></th>
+        <th>Cartão</th>
+        <th>Fechamento</th>
+        <th>Vencimento</th>
+        <th>Limite</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+
+
+            <!-- LANÇAMENTOS DE CARTÃO -->
+            <div class="card">
+              <div class="table-header">
+                <h3>Lançamentos de cartão</h3>
+                <div class="table-actions">
+                  <button id="btn-delete-transacao-cartao" disabled>
+                    Excluir
+                  </button>
+                </div>
+              </div>
+
+              <table id="table-transacoes-cartao" class="data-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        id="chk-all-transacoes-cartao"
+                      />
+                    </th>
+                    <th>Data compra</th>
+                    <th>Cartão</th>
+                    <th>Descrição</th>
+                    <th>Parcela</th>
+                    <th>Valor parcela</th>
+                  </tr>
+                  <tr class="filters-row">
+                    <th></th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="transacoes-cartao"
+                        data-field="purchase_date"
+                        placeholder="Filtrar"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="transacoes-cartao"
+                        data-field="cartao"
+                        placeholder="Cartão"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="transacoes-cartao"
+                        data-field="description"
+                        placeholder="Descrição"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="transacoes-cartao"
+                        data-field="installment_n"
+                        placeholder="Parcela"
+                      />
+                    </th>
+                    <th>
+                      <input
+                        class="filter-input"
+                        data-table="transacoes-cartao"
+                        data-field="amount_installment"
+                        placeholder="≥ valor"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+<div class="card">
+  <h3>Resumo por cartão</h3>
+  <div class="grid-2">
+    <div>
+      <h4>Gasto por cartão</h4>
+      <canvas id="chart-gasto-cartao"></canvas>
+    </div>
+    <div>
+      <h4>Limite disponível por cartão</h4>
+      <canvas id="chart-limite-cartao"></canvas>
+    </div>
+  </div>
+</div>
+
+
+        <!-- PARÂMETROS RECEITA -->
+        <section class="page" id="page-param-receita">
+          <h1>Parâmetros de Receita</h1>
+
+          <div class="grid-3">
+            <div class="card">
+              <h3>Categorias de receita</h3>
+              <form id="form-cat-receita" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova categoria"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-cat-receita" class="param-list"></ul>
+            </div>
+
+            <div class="card">
+              <h3>Contas de receita</h3>
+              <form id="form-conta-receita" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova conta"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-conta-receita" class="param-list"></ul>
+            </div>
+
+            <div class="card">
+              <h3>Formas de pagamento</h3>
+              <form id="form-fp-receita" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova forma"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-fp-receita" class="param-list"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- PARÂMETROS DESPESA -->
+        <section class="page" id="page-param-despesa">
+          <h1>Parâmetros de Despesa</h1>
+
+          <div class="grid-3">
+            <div class="card">
+              <h3>Categorias de despesa</h3>
+              <form id="form-cat-despesa" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova categoria"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-cat-despesa" class="param-list"></ul>
+            </div>
+
+            <div class="card">
+              <h3>Contas de despesa</h3>
+              <form id="form-conta-despesa" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova conta"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-conta-despesa" class="param-list"></ul>
+            </div>
+
+            <div class="card">
+              <h3>Formas de pagamento</h3>
+              <form id="form-fp-despesa" class="form-inline">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Nova forma"
+                  required
+                />
+                <button type="submit">Adicionar</button>
+              </form>
+              <ul id="lista-fp-despesa" class="param-list"></ul>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
