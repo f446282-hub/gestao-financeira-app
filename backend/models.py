@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, Numeric, Text
-from .database import Base
+from backend.database import Base
+
 
 
 class Revenue(Base):

@@ -2,9 +2,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-import models
-import schemas
-import crud
+from backend import models, schemas, crud
+
 from database import SessionLocal, engine
 
 # Garante que as tabelas existem no banco
