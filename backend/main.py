@@ -1,23 +1,35 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
-from . import models, schemas, crud
-from .database import SessionLocal, engine
+import models
+import schemas
+import crud
+from database import SessionLocal, engine
 
+# Garante que as tabelas existem no banco
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Gestão Financeira Pessoal")
+# ----------------------------------------------------------------------------
+# App e CORS
+# ----------------------------------------------------------------------------
+
+app = FastAPI(
+    title="Gestão Financeira API",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # depois podemos restringir
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ----------------------------------------------------------------------------
+# Dependência de DB
+# ----------------------------------------------------------------------------
 
 def get_db():
     db = SessionLocal()
@@ -26,247 +38,154 @@ def get_db():
     finally:
         db.close()
 
+# ----------------------------------------------------------------------------
+# RECEITAS
+# ----------------------------------------------------------------------------
 
-@app.get("/api/health")
-def health():
-  return {"status": "ok"}
-
-
-# ---------- RECEITAS ----------
-
-@app.get("/api/receitas")
+@app.get("/api/receitas", response_model=list[schemas.RevenueOut])
 def listar_receitas(db: Session = Depends(get_db)):
-    # Retorna todas as receitas para o frontend
-    return crud.get_receitas(db)
+    return crud.get_all_revenues(db)
 
 
-@app.post("/api/receitas")
+@app.post("/api/receitas", response_model=schemas.RevenueOut)
 def criar_receita(receita: schemas.RevenueCreate, db: Session = Depends(get_db)):
-    return crud.create_receita(db, receita)
+    return crud.create_revenue_with_installments(db, receita)
 
 
-@app.put("/api/receitas/{receita_id}")
+@app.put("/api/receitas/{receita_id}", response_model=schemas.RevenueOut)
 def atualizar_receita(
     receita_id: int,
     receita: schemas.RevenueCreate,
     db: Session = Depends(get_db),
 ):
-    db_receita = crud.update_receita(db, receita_id, receita)
-    if not db_receita:
+    updated = crud.update_revenue(db, receita_id, receita)
+    if not updated:
         raise HTTPException(status_code=404, detail="Receita não encontrada")
-    return db_receita
-
-    # Cria receita (e parcelas, se houver) e devolve o que foi salvo
-    return crud.create_receita(db, receita)
+    return updated
 
 
-@app.put("/api/receitas/{receita_id}")
-def atualizar_receita(
-    receita_id: int,
-    receita: schemas.RevenueCreate,
-    db: Session = Depends(get_db),
-):
-    db_receita = crud.update_receita(db, receita_id, receita)
-    if not db_receita:
-        raise HTTPException(status_code=404, detail="Receita não encontrada")
-    return db_receita
-
-
-@app.delete("/api/receitas/{receita_id}", status_code=204)
+@app.delete("/api/receitas/{receita_id}")
 def excluir_receita(receita_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_receita(db, receita_id)
-    if not ok:
+    if not crud.delete_revenue(db, receita_id):
         raise HTTPException(status_code=404, detail="Receita não encontrada")
+    return {"detail": "Receita excluída com sucesso"}
 
+# ----------------------------------------------------------------------------
+# DESPESAS
+# ----------------------------------------------------------------------------
 
-
-@app.delete("/api/receitas/{receita_id}", status_code=204)
-def excluir_receita(receita_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_receita(db, receita_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Receita não encontrada")
-
-
-@app.patch("/api/receitas/{revenue_id}/pagamento", response_model=schemas.RevenueOut)
-def update_pagamento_receita(
-    revenue_id: int,
-    data: schemas.RevenuePaymentUpdate,
-    db: Session = Depends(get_db),
-):
-    obj = crud.update_revenue_payment_date(db, revenue_id, data.payment_date)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Receita não encontrada")
-    return obj
-
-
-# ---------- DESPESAS ----------
-
-@app.get("/api/despesas")
+@app.get("/api/despesas", response_model=list[schemas.ExpenseOut])
 def listar_despesas(db: Session = Depends(get_db)):
-    return crud.get_despesas(db)
+    return crud.get_all_expenses(db)
 
 
-@app.post("/api/despesas")
-def criar_despesa(
-    despesa: schemas.ExpenseCreate,
-    db: Session = Depends(get_db),
-):
-    return crud.create_despesa(db, despesa)
+@app.post("/api/despesas", response_model=schemas.ExpenseOut)
+def criar_despeza(despesa: schemas.ExpenseCreate, db: Session = Depends(get_db)):
+    return crud.create_expense_with_installments(db, despesa)
 
 
-@app.put("/api/despesas/{despesa_id}")
+@app.put("/api/despesas/{despesa_id}", response_model=schemas.ExpenseOut)
 def atualizar_despesa(
     despesa_id: int,
     despesa: schemas.ExpenseCreate,
     db: Session = Depends(get_db),
 ):
-    db_despesa = crud.update_despesa(db, despesa_id, despesa)
-    if not db_despesa:
+    updated = crud.update_expense(db, despesa_id, despesa)
+    if not updated:
         raise HTTPException(status_code=404, detail="Despesa não encontrada")
-    return db_despesa
+    return updated
 
 
-@app.delete("/api/despesas/{despesa_id}", status_code=204)
+@app.delete("/api/despesas/{despesa_id}")
 def excluir_despesa(despesa_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_despesa(db, despesa_id)
-    if not ok:
+    if not crud.delete_expense(db, despesa_id):
         raise HTTPException(status_code=404, detail="Despesa não encontrada")
+    return {"detail": "Despesa excluída com sucesso"}
 
+# ----------------------------------------------------------------------------
+# CARTÕES DE CRÉDITO
+# ----------------------------------------------------------------------------
 
-@app.patch("/api/despesas/{expense_id}/pagamento", response_model=schemas.ExpenseOut)
-def update_pagamento_despesa(
-    expense_id: int,
-    data: schemas.ExpensePaymentUpdate,
-    db: Session = Depends(get_db),
-):
-    obj = crud.update_expense_payment_date(db, expense_id, data.payment_date)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Despesa não encontrada")
-    return obj
-
-
-# ---------- CARTÕES DE CRÉDITO ----------
-
-@app.get("/api/cartoes", response_model=List[schemas.CreditCardOut])
-def list_cartoes(db: Session = Depends(get_db)):
-    return crud.get_credit_cards(db)
+@app.get("/api/cartoes", response_model=list[schemas.CreditCardOut])
+def listar_cartoes(db: Session = Depends(get_db)):
+    return crud.get_all_credit_cards(db)
 
 
 @app.post("/api/cartoes", response_model=schemas.CreditCardOut)
-def create_cartao(card: schemas.CreditCardCreate, db: Session = Depends(get_db)):
-    return crud.create_credit_card(db, card)
+def criar_cartao(cartao: schemas.CreditCardCreate, db: Session = Depends(get_db)):
+    return crud.create_credit_card(db, cartao)
 
 
-@app.get("/api/transacoes-cartao")
+@app.put("/api/cartoes/{cartao_id}", response_model=schemas.CreditCardOut)
+def atualizar_cartao(
+    cartao_id: int,
+    cartao: schemas.CreditCardCreate,
+    db: Session = Depends(get_db),
+):
+    updated = crud.update_credit_card(db, cartao_id, cartao)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Cartão não encontrado")
+    return updated
+
+
+@app.delete("/api/cartoes/{cartao_id}")
+def excluir_cartao(cartao_id: int, db: Session = Depends(get_db)):
+    if not crud.delete_credit_card(db, cartao_id):
+        raise HTTPException(status_code=404, detail="Cartão não encontrado")
+    return {"detail": "Cartão excluído com sucesso"}
+
+# ----------------------------------------------------------------------------
+# LANÇAMENTOS DE CARTÃO
+# ----------------------------------------------------------------------------
+
+@app.get(
+    "/api/transacoes-cartao",
+    response_model=list[schemas.CreditCardTransactionOut],
+)
 def listar_transacoes_cartao(db: Session = Depends(get_db)):
-    return crud.get_transacoes_cartao(db)
+    return crud.get_all_credit_card_transactions(db)
 
 
-@app.post("/api/transacoes-cartao")
+@app.post(
+    "/api/transacoes-cartao",
+    response_model=schemas.CreditCardTransactionOut,
+)
 def criar_transacao_cartao(
     transacao: schemas.CreditCardTransactionCreate,
     db: Session = Depends(get_db),
 ):
-    return crud.create_transacao_cartao(db, transacao)
+    return crud.create_credit_card_transaction_with_installments(db, transacao)
 
 
-@app.delete("/api/transacoes-cartao/{transacao_id}", status_code=204)
-def excluir_transacao_cartao(transacao_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_transacao_cartao(db, transacao_id)
-    if not ok:
+@app.put(
+    "/api/transacoes-cartao/{transacao_id}",
+    response_model=schemas.CreditCardTransactionOut,
+)
+def atualizar_transacao_cartao(
+    transacao_id: int,
+    transacao: schemas.CreditCardTransactionCreate,
+    db: Session = Depends(get_db),
+):
+    updated = crud.update_credit_card_transaction(db, transacao_id, transacao)
+    if not updated:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    return updated
 
 
-@app.delete("/api/transacoes-cartao/{transacao_id}", status_code=204)
+@app.delete("/api/transacoes-cartao/{transacao_id}")
 def excluir_transacao_cartao(transacao_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_transacao_cartao(db, transacao_id)
-    if not ok:
+    if not crud.delete_credit_card_transaction(db, transacao_id):
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    return {"detail": "Transação excluída com sucesso"}
 
+# ----------------------------------------------------------------------------
+# DASHBOARD / RESUMOS
+# ----------------------------------------------------------------------------
 
-# ---------- PARÂMETROS DE RECEITA ----------
-
-@app.get("/api/receita/categorias", response_model=List[schemas.RevenueCategoryOut])
-def list_revenue_categories(db: Session = Depends(get_db)):
-    return crud.get_revenue_categories(db)
-
-
-@app.post("/api/receita/categorias", response_model=schemas.RevenueCategoryOut)
-def create_revenue_category(
-    item: schemas.RevenueCategoryCreate, db: Session = Depends(get_db)
-):
-    return crud.create_revenue_category(db, item)
-
-
-@app.get("/api/receita/contas", response_model=List[schemas.RevenueAccountOut])
-def list_revenue_accounts(db: Session = Depends(get_db)):
-    return crud.get_revenue_accounts(db)
-
-
-@app.post("/api/receita/contas", response_model=schemas.RevenueAccountOut)
-def create_revenue_account(
-    item: schemas.RevenueAccountCreate, db: Session = Depends(get_db)
-):
-    return crud.create_revenue_account(db, item)
-
-
-@app.get(
-    "/api/receita/formas-pagamento",
-    response_model=List[schemas.RevenuePaymentMethodOut],
-)
-def list_revenue_payment_methods(db: Session = Depends(get_db)):
-    return crud.get_revenue_payment_methods(db)
-
-
-@app.post(
-    "/api/receita/formas-pagamento",
-    response_model=schemas.RevenuePaymentMethodOut,
-)
-def create_revenue_payment_method(
-    item: schemas.RevenuePaymentMethodCreate, db: Session = Depends(get_db)
-):
-    return crud.create_revenue_payment_method(db, item)
-
-
-# ---------- PARÂMETROS DE DESPESA ----------
-
-@app.get("/api/despesa/categorias", response_model=List[schemas.ExpenseCategoryOut])
-def list_expense_categories(db: Session = Depends(get_db)):
-    return crud.get_expense_categories(db)
-
-
-@app.post("/api/despesa/categorias", response_model=schemas.ExpenseCategoryOut)
-def create_expense_category(
-    item: schemas.ExpenseCategoryCreate, db: Session = Depends(get_db)
-):
-    return crud.create_expense_category(db, item)
-
-
-@app.get("/api/despesa/contas", response_model=List[schemas.ExpenseAccountOut])
-def list_expense_accounts(db: Session = Depends(get_db)):
-    return crud.get_expense_accounts(db)
-
-
-@app.post("/api/despesa/contas", response_model=schemas.ExpenseAccountOut)
-def create_expense_account(
-    item: schemas.ExpenseAccountCreate, db: Session = Depends(get_db)
-):
-    return crud.create_expense_account(db, item)
-
-
-@app.get(
-    "/api/despesa/formas-pagamento",
-    response_model=List[schemas.ExpensePaymentMethodOut],
-)
-def list_expense_payment_methods(db: Session = Depends(get_db)):
-    return crud.get_expense_payment_methods(db)
-
-
-@app.post(
-    "/api/despesa/formas-pagamento",
-    response_model=schemas.ExpensePaymentMethodOut,
-)
-def create_expense_payment_method(
-    item: schemas.ExpensePaymentMethodCreate, db: Session = Depends(get_db)
-):
-    return crud.create_expense_payment_method(db, item)
+@app.get("/api/dashboard/caixa")
+def resumo_dashboard(db: Session = Depends(get_db)):
+    """
+    Endpoint simples de exemplo para o dashboard.
+    (A lógica real você já tinha montado no CRUD; podemos ir refinando depois)
+    """
+    return crud.get_dashboard_summary(db)

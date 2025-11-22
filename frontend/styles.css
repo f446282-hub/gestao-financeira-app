@@ -151,20 +151,9 @@ h1 {
 
 .dash-filters {
   display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.dash-filters label {
-  font-size: 0.8rem;
-  color: #6b7280;
-  display: flex;
-  flex-direction: column;
-}
-
-.dash-filters select {
-  margin-top: 4px;
-  font-size: 0.8rem;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 /* FORMULÁRIOS */
@@ -239,6 +228,10 @@ button:disabled {
   background: #f3f4f6;
 }
 
+.data-table tbody tr.row-selected {
+  background: #eef2ff;
+}
+
 /* Cabeçalho com botões de ação */
 
 .table-header {
@@ -270,8 +263,6 @@ button:disabled {
   background: #e5e7eb;
   color: #111827;
 }
-
-}
 .metric-header {
   display: flex;
   align-items: center;
@@ -297,7 +288,12 @@ button:disabled {
 
 /* Linha de filtros */
 
-.filters-row input {
+.data-table thead tr.filters-row th {
+  padding: 2px 4px;
+  background-color: #eef2ff;
+}
+
+.data-table thead tr.filters-row input {
   width: 100%;
   box-sizing: border-box;
   padding: 3px 4px;
@@ -307,6 +303,79 @@ button:disabled {
   background-color: #f9fafb;
 }
 
+.filters-row .filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-input.filter-active {
+  border-color: #2563eb;
+  background-color: #eef2ff;
+  box-shadow: 0 0 0 1px #2563eb inset;
+}
+
+.btn-clear-filters {
+  background: transparent;
+  color: #1d4ed8;
+  border: 1px solid #c7d2fe;
+  padding: 6px 10px;
+}
+
+.btn-clear-filters:hover:not(:disabled) {
+  background: #e0e7ff;
+}
+
+.table-placeholder {
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.85rem;
+  padding: 16px 0;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-group-title {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.filter-pill input {
+  accent-color: #2563eb;
+}
+
+.filter-pill span {
+  font-size: 0.75rem;
+}
+
+.filter-pill input:checked + span {
+  font-weight: 600;
+  color: #1d4ed8;
+}
 
 /* PARAM LIST + INLINE FORM */
 
@@ -348,39 +417,5 @@ button:disabled {
   .dashboard-cards {
     grid-template-columns: 1fr;
   }
-}
-
-.card-logo-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.card-logo-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  font-weight: 600;
-  background: #e5e7eb;
-  color: #111827;
-}
-
-.data-table thead tr.filters-row th {
-  padding: 2px 4px;
-  background-color: #eef2ff;
-}
-
-.data-table thead tr.filters-row input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 3px 4px;
-  font-size: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background-color: #f9fafb;
 }
 

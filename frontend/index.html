@@ -78,27 +78,14 @@
                 <p class="card-subtitle">Receitas x Despesas por mês</p>
               </div>
               <div class="dash-filters">
-                <label>
-                  Ano
-                  <select id="filter-year" multiple size="4"></select>
-                </label>
-                <label>
-                  Meses
-                  <select id="filter-months" multiple size="4">
-                    <option value="1">Jan</option>
-                    <option value="2">Fev</option>
-                    <option value="3">Mar</option>
-                    <option value="4">Abr</option>
-                    <option value="5">Mai</option>
-                    <option value="6">Jun</option>
-                    <option value="7">Jul</option>
-                    <option value="8">Ago</option>
-                    <option value="9">Set</option>
-                    <option value="10">Out</option>
-                    <option value="11">Nov</option>
-                    <option value="12">Dez</option>
-                  </select>
-                </label>
+                <div class="filter-group">
+                  <span class="filter-group-title">Anos</span>
+                  <div id="filter-year-group" class="filter-checkbox-group"></div>
+                </div>
+                <div class="filter-group">
+                  <span class="filter-group-title">Meses</span>
+                  <div id="filter-months-group" class="filter-checkbox-group"></div>
+                </div>
               </div>
             </div>
 
@@ -267,6 +254,9 @@
                 <div class="table-actions">
                   <button id="btn-edit-receita" disabled>Editar</button>
                   <button id="btn-delete-receita" disabled>Excluir</button>
+                  <button class="btn-clear-filters" data-table="receitas">
+                    Limpar filtros
+                  </button>
                 </div>
               </div>
 
@@ -283,12 +273,24 @@
                   <tr class="filters-row">
                     <th></th>
                     <th>
-                      <input
-                        class="filter-input"
-                        data-table="receitas"
-                        data-field="due_date"
-                        placeholder="Filtrar"
-                      />
+                      <div class="filter-range">
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="receitas"
+                          data-field="due_date"
+                          data-filter-type="date-from"
+                          placeholder="De"
+                        />
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="receitas"
+                          data-field="due_date"
+                          data-filter-type="date-to"
+                          placeholder="Até"
+                        />
+                      </div>
                     </th>
                     <th>
                       <input
@@ -311,10 +313,30 @@
                         class="filter-input"
                         data-table="receitas"
                         data-field="amount_total"
+                        data-filter-type="number-min"
                         placeholder="≥ valor"
                       />
                     </th>
-                    <th></th>
+                    <th>
+                      <div class="filter-range">
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="receitas"
+                          data-field="payment_date"
+                          data-filter-type="date-from"
+                          placeholder="De"
+                        />
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="receitas"
+                          data-field="payment_date"
+                          data-filter-type="date-to"
+                          placeholder="Até"
+                        />
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -328,6 +350,9 @@
                 <div class="table-actions">
                   <button id="btn-edit-despesa" disabled>Editar</button>
                   <button id="btn-delete-despesa" disabled>Excluir</button>
+                  <button class="btn-clear-filters" data-table="despesas">
+                    Limpar filtros
+                  </button>
                 </div>
               </div>
 
@@ -344,12 +369,24 @@
                   <tr class="filters-row">
                     <th></th>
                     <th>
-                      <input
-                        class="filter-input"
-                        data-table="despesas"
-                        data-field="due_date"
-                        placeholder="Filtrar"
-                      />
+                      <div class="filter-range">
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="despesas"
+                          data-field="due_date"
+                          data-filter-type="date-from"
+                          placeholder="De"
+                        />
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="despesas"
+                          data-field="due_date"
+                          data-filter-type="date-to"
+                          placeholder="Até"
+                        />
+                      </div>
                     </th>
                     <th>
                       <input
@@ -372,10 +409,30 @@
                         class="filter-input"
                         data-table="despesas"
                         data-field="amount_total"
+                        data-filter-type="number-min"
                         placeholder="≥ valor"
                       />
                     </th>
-                    <th></th>
+                    <th>
+                      <div class="filter-range">
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="despesas"
+                          data-field="payment_date"
+                          data-filter-type="date-from"
+                          placeholder="De"
+                        />
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="despesas"
+                          data-field="payment_date"
+                          data-filter-type="date-to"
+                          placeholder="Até"
+                        />
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -506,48 +563,45 @@
             </div>
           </div>
 
-<div class="card">
-  <h3>Resumo por cartão</h3>
-  <div class="grid-2">
-    <div>
-      <h4>Gasto por cartão</h4>
-      <canvas id="chart-gasto-cartao"></canvas>
-    </div>
-    <div>
-      <h4>Limite disponível por cartão</h4>
-      <canvas id="chart-limite-cartao"></canvas>
-    </div>
-  </div>
-</div>
-
+          <div class="card">
+            <h3>Resumo por cartão</h3>
+            <div class="grid-2">
+              <div>
+                <h4>Gasto por cartão</h4>
+                <canvas id="chart-gasto-cartao"></canvas>
+              </div>
+              <div>
+                <h4>Limite disponível por cartão</h4>
+                <canvas id="chart-limite-cartao"></canvas>
+              </div>
+            </div>
+          </div>
 
           <div class="grid-2">
             <!-- LISTA CARTÕES -->
             <div class="card">
-  <div class="table-header">
-    <h3>Cartões cadastrados</h3>
-    <div class="table-actions">
-      <button id="btn-edit-cartao" disabled>Editar</button>
-      <button id="btn-delete-cartao" disabled>Excluir</button>
-    </div>
-  </div>
+              <div class="table-header">
+                <h3>Cartões cadastrados</h3>
+                <div class="table-actions">
+                  <button id="btn-edit-cartao" disabled>Editar</button>
+                  <button id="btn-delete-cartao" disabled>Excluir</button>
+                </div>
+              </div>
 
-  <table id="table-cartoes" class="data-table">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="chk-all-cartoes" /></th>
-        <th>Cartão</th>
-        <th>Fechamento</th>
-        <th>Vencimento</th>
-        <th>Limite</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
-
-
+              <table id="table-cartoes" class="data-table">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="chk-all-cartoes" /></th>
+                    <th>Cartão</th>
+                    <th>Fechamento</th>
+                    <th>Vencimento</th>
+                    <th>Limite</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
 
             <!-- LANÇAMENTOS DE CARTÃO -->
             <div class="card">
@@ -556,6 +610,9 @@
                 <div class="table-actions">
                   <button id="btn-delete-transacao-cartao" disabled>
                     Excluir
+                  </button>
+                  <button class="btn-clear-filters" data-table="transacoes-cartao">
+                    Limpar filtros
                   </button>
                 </div>
               </div>
@@ -578,12 +635,24 @@
                   <tr class="filters-row">
                     <th></th>
                     <th>
-                      <input
-                        class="filter-input"
-                        data-table="transacoes-cartao"
-                        data-field="purchase_date"
-                        placeholder="Filtrar"
-                      />
+                      <div class="filter-range">
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="transacoes-cartao"
+                          data-field="purchase_date"
+                          data-filter-type="date-from"
+                          placeholder="De"
+                        />
+                        <input
+                          type="date"
+                          class="filter-input"
+                          data-table="transacoes-cartao"
+                          data-field="purchase_date"
+                          data-filter-type="date-to"
+                          placeholder="Até"
+                        />
+                      </div>
                     </th>
                     <th>
                       <input
@@ -614,6 +683,7 @@
                         class="filter-input"
                         data-table="transacoes-cartao"
                         data-field="amount_installment"
+                        data-filter-type="number-min"
                         placeholder="≥ valor"
                       />
                     </th>
@@ -624,21 +694,6 @@
             </div>
           </div>
         </section>
-
-<div class="card">
-  <h3>Resumo por cartão</h3>
-  <div class="grid-2">
-    <div>
-      <h4>Gasto por cartão</h4>
-      <canvas id="chart-gasto-cartao"></canvas>
-    </div>
-    <div>
-      <h4>Limite disponível por cartão</h4>
-      <canvas id="chart-limite-cartao"></canvas>
-    </div>
-  </div>
-</div>
-
 
         <!-- PARÂMETROS RECEITA -->
         <section class="page" id="page-param-receita">

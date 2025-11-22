@@ -1,287 +1,287 @@
-from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import date
 from calendar import monthrange
+from datetime import date
+from typing import Optional
 
-from . import models, schemas
+from sqlalchemy.orm import Session
+
+import models
+import schemas
 
 
-def add_months(d: date, months: int) -> date:
-    """Adiciona meses a uma data, ajustando fim de mês."""
-    month = d.month - 1 + months
-    year = d.year + month // 12
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def add_months(base_date: date, months: int) -> date:
+    """Adiciona meses a uma data, respeitando o fim do mês."""
+    month = base_date.month - 1 + months
+    year = base_date.year + month // 12
     month = month % 12 + 1
-    day = min(d.day, monthrange(year, month)[1])
+    day = min(base_date.day, monthrange(year, month)[1])
     return date(year, month, day)
 
 
-# ---------- RECEITAS ----------
+# ---------------------------------------------------------------------------
+# RECEITAS
+# ---------------------------------------------------------------------------
 
-def get_revenues(db: Session):
-    return db.query(models.Revenue).order_by(models.Revenue.due_date.desc()).all()
-
-
-def create_revenue_with_installments(db: Session, revenue: schemas.RevenueCreate):
-    parcelas = revenue.installments if revenue.installments and revenue.installments > 0 else 1
-    valor_total = revenue.amount_total or 0.0
-    valor_parcela = valor_total / parcelas if parcelas > 0 else valor_total
-
-    created = []
-
-    for n in range(1, parcelas + 1):
-        due_n = add_months(revenue.due_date, n - 1)
-        pay_date = revenue.payment_date if parcelas == 1 else None
-
-        obj = models.Revenue(
-            description=revenue.description,
-            category=revenue.category,
-            account=revenue.account,
-            due_date=due_n,
-            payment_date=pay_date,
-            amount_total=valor_parcela,
-            installments=parcelas,
-            installment_n=n,
-            payment_method=revenue.payment_method,
-            notes=revenue.notes,
-        )
-        db.add(obj)
-        created.append(obj)
-
-    db.commit()
-    for c in created:
-        db.refresh(c)
-
-    # devolve a primeira parcela (API espera um objeto só)
-    return created[0]
-
-
-def update_revenue_payment_date(
-    db: Session, revenue_id: int, payment_date: Optional[date]
-):
-    obj = db.query(models.Revenue).filter(models.Revenue.id == revenue_id).first()
-    if not obj:
-        return None
-    obj.payment_date = payment_date
-    db.commit()
-    db.refresh(obj)
-    return obj
-from sqlalchemy.orm import Session
-from . import models, schemas
-# (esses imports provavelmente já existem no topo do arquivo)
-
-def update_receita(db: Session, receita_id: int, receita_in: schemas.RevenueCreate):
-    receita = db.query(models.Receita).filter(models.Receita.id == receita_id).first()
-    if not receita:
-        return None
-    for field, value in receita_in.dict().items():
-        setattr(receita, field, value)
-    db.commit()
-    db.refresh(receita)
-    return receita
-
-
-def delete_receita(db: Session, receita_id: int) -> bool:
-    receita = db.query(models.Receita).filter(models.Receita.id == receita_id).first()
-    if not receita:
-        return False
-    db.delete(receita)
-    db.commit()
-    return True
-
-
-def update_despesa(db: Session, despesa_id: int, despesa_in: schemas.ExpenseCreate):
-    despesa = db.query(models.Despesa).filter(models.Despesa.id == despesa_id).first()
-    if not despesa:
-        return None
-    for field, value in despesa_in.dict().items():
-        setattr(despesa, field, value)
-    db.commit()
-    db.refresh(despesa)
-    return despesa
-
-
-def delete_despesa(db: Session, despesa_id: int) -> bool:
-    despesa = db.query(models.Despesa).filter(models.Despesa.id == despesa_id).first()
-    if not despesa:
-        return False
-    db.delete(despesa)
-    db.commit()
-    return True
-
-
-
-# ---------- DESPESAS ----------
-
-def get_expenses(db: Session):
-    return db.query(models.Expense).order_by(models.Expense.due_date.desc()).all()
-
-
-def create_expense_with_installments(db: Session, expense: schemas.ExpenseCreate):
-    parcelas = expense.installments if expense.installments and expense.installments > 0 else 1
-    valor_total = expense.amount_total or 0.0
-    valor_parcela = valor_total / parcelas if parcelas > 0 else valor_total
-
-    created = []
-
-    for n in range(1, parcelas + 1):
-        due_n = add_months(expense.due_date, n - 1)
-        pay_date = expense.payment_date if parcelas == 1 else None
-
-        obj = models.Expense(
-            description=expense.description,
-            category=expense.category,
-            account=expense.account,
-            due_date=due_n,
-            payment_date=pay_date,
-            amount_total=valor_parcela,
-            installments=parcelas,
-            installment_n=n,
-            payment_method=expense.payment_method,
-            notes=expense.notes,
-        )
-        db.add(obj)
-        created.append(obj)
-
-    db.commit()
-    for c in created:
-        db.refresh(c)
-
-    return created[0]
-
-
-def update_expense_payment_date(
-    db: Session, expense_id: int, payment_date: Optional[date]
-):
-    obj = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
-    if not obj:
-        return None
-    obj.payment_date = payment_date
-    db.commit()
-    db.refresh(obj)
-    return obj
-def update_despesa(db: Session, despesa_id: int, despesa_in: schemas.ExpenseCreate) -> models.Despesa | None:
-    despesa = db.query(models.Despesa).filter(models.Despesa.id == despesa_id).first()
-    if not despesa:
-        return None
-    for field, value in despesa_in.dict().items():
-        setattr(despesa, field, value)
-    db.commit()
-    db.refresh(despesa)
-    return despesa
-
-
-def delete_despesa(db: Session, despesa_id: int) -> bool:
-    despesa = db.query(models.Despesa).filter(models.Despesa.id == despesa_id).first()
-    if not despesa:
-        return False
-    db.delete(despesa)
-    db.commit()
-    return True
-
-
-# ---------- CARTÕES DE CRÉDITO ----------
-
-def get_credit_cards(db: Session):
-    return db.query(models.CreditCard).order_by(models.CreditCard.name.asc()).all()
-
-
-def create_credit_card(db: Session, card: schemas.CreditCardCreate):
-    db_obj = models.CreditCard(**card.dict())
-    db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
-    return db_obj
-
-
-def get_credit_card_transactions(db: Session, card_id: Optional[int] = None):
-    query = db.query(models.CreditCardTransaction)
-    if card_id is not None:
-        query = query.filter(
-            models.CreditCardTransaction.credit_card_id == card_id
-        )
-    return query.order_by(models.CreditCardTransaction.purchase_date.desc()).all()
-
-
-def create_credit_card_transaction(
-    db: Session, trx: schemas.CreditCardTransactionCreate
-):
+def create_revenue_with_installments(
+    db: Session, revenue_in: schemas.RevenueCreate
+) -> models.Revenue:
     """
-    Cria UMA TRANSAÇÃO POR PARCELA no cartão.
-
-    Ex:
-      total = 1000, installments = 4
-      -> 4 linhas em credit_card_transactions
-         (1/4, 2/4, 3/4, 4/4), cada uma com amount_installment.
+    Cria uma receita e, se tiver parcelas, gera os lançamentos mensais.
     """
-    parcelas = trx.installments if trx.installments and trx.installments > 0 else 1
-    total = trx.amount_total or 0.0
+    # Receita "mãe"
+    revenue = models.Revenue(
+        description=revenue_in.description,
+        category=revenue_in.category,
+        amount=revenue_in.amount,
+        due_date=revenue_in.due_date,
+        account=revenue_in.account,
+        payment_method=revenue_in.payment_method,
+        total_installments=revenue_in.total_installments,
+    )
+    db.add(revenue)
+    db.commit()
+    db.refresh(revenue)
 
-    # se o front já mandou amount_installment usamos ele,
-    # senão calculamos aqui
-    valor_parcela = trx.amount_installment or (total / parcelas if parcelas > 0 else total)
+    # Parcelas (se informado)
+    if revenue_in.total_installments and revenue_in.total_installments > 1:
+        amount_per_installment = revenue_in.amount / revenue_in.total_installments
+        for installment_number in range(1, revenue_in.total_installments + 1):
+            installment_due_date = add_months(revenue_in.due_date, installment_number - 1)
+            installment = models.RevenueInstallment(
+                revenue_id=revenue.id,
+                installment_number=installment_number,
+                amount=amount_per_installment,
+                due_date=installment_due_date,
+                paid=False,
+            )
+            db.add(installment)
+        db.commit()
 
-    created = []
+    return revenue
 
-    for n in range(1, parcelas + 1):
-        due_n = add_months(trx.due_date, n - 1)
 
-        obj = models.CreditCardTransaction(
-            credit_card_id=trx.credit_card_id,
-            description=trx.description,
-            category=trx.category,
-            purchase_date=trx.purchase_date,
-            due_date=due_n,
-            amount_total=total,
-            installments=parcelas,
-            installment_n=n,
-            amount_installment=valor_parcela,
-        )
-        db.add(obj)
-        created.append(obj)
+def get_all_revenues(db: Session):
+    return db.query(models.Revenue).all()
+
+
+def update_revenue(
+    db: Session, revenue_id: int, revenue_in: schemas.RevenueCreate
+) -> Optional[models.Revenue]:
+    revenue = db.query(models.Revenue).filter(models.Revenue.id == revenue_id).first()
+    if not revenue:
+        return None
+
+    for field, value in revenue_in.model_dump().items():
+        setattr(revenue, field, value)
 
     db.commit()
-    for c in created:
-        db.refresh(c)
-
-    # devolvemos só a primeira parcela na resposta da API,
-    # mas TODAS as parcelas já estão gravadas no banco
-    return created[0]
+    db.refresh(revenue)
+    return revenue
 
 
+def delete_revenue(db: Session, revenue_id: int) -> bool:
+    revenue = db.query(models.Revenue).filter(models.Revenue.id == revenue_id).first()
+    if not revenue:
+        return False
+    db.delete(revenue)
+    db.commit()
+    return True
 
-def create_expenses_from_card_transaction(
-    db: Session, trx_obj: models.CreditCardTransaction
-):
-    """Cria despesas automaticamente para cada parcela de uma compra no cartão."""
-    despesas = []
-    parcelas = trx_obj.installments if trx_obj.installments and trx_obj.installments > 0 else 1
 
-    for parcela in range(1, parcelas + 1):
-        due_n = add_months(trx_obj.due_date, parcela - 1)
-        expense = models.Expense(
-            description=f"Cartão: {trx_obj.description}",
-            category=trx_obj.category,
-            account=f"Cartão {trx_obj.credit_card_id}",
-            due_date=due_n,
-            payment_date=None,
-            amount_total=float(trx_obj.amount_installment),
-            installments=parcelas,
-            installment_n=parcela,
-            payment_method="Cartão de crédito",
-            notes="Gerado automaticamente a partir de compra no cartão",
-        )
-        db.add(expense)
-        despesas.append(expense)
+# ---------------------------------------------------------------------------
+# DESPESAS
+# ---------------------------------------------------------------------------
+
+def create_expense_with_installments(
+    db: Session, expense_in: schemas.ExpenseCreate
+) -> models.Expense:
+    """
+    Cria uma despesa e, se tiver parcelas, gera os lançamentos mensais.
+    """
+    expense = models.Expense(
+        description=expense_in.description,
+        category=expense_in.category,
+        amount=expense_in.amount,
+        due_date=expense_in.due_date,
+        account=expense_in.account,
+        payment_method=expense_in.payment_method,
+        total_installments=expense_in.total_installments,
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+
+    if expense_in.total_installments and expense_in.total_installments > 1:
+        amount_per_installment = expense_in.amount / expense_in.total_installments
+        for installment_number in range(1, expense_in.total_installments + 1):
+            installment_due_date = add_months(expense_in.due_date, installment_number - 1)
+            installment = models.ExpenseInstallment(
+                expense_id=expense.id,
+                installment_number=installment_number,
+                amount=amount_per_installment,
+                due_date=installment_due_date,
+                paid=False,
+            )
+            db.add(installment)
+        db.commit()
+
+    return expense
+
+
+def get_all_expenses(db: Session):
+    return db.query(models.Expense).all()
+
+
+def update_expense(
+    db: Session, expense_id: int, expense_in: schemas.ExpenseCreate
+) -> Optional[models.Expense]:
+    expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    if not expense:
+        return None
+
+    for field, value in expense_in.model_dump().items():
+        setattr(expense, field, value)
 
     db.commit()
-    for d in despesas:
-        db.refresh(d)
+    db.refresh(expense)
+    return expense
 
-    return despesas
-def delete_transacao_cartao(db: Session, transacao_id: int) -> bool:
-    tx = db.query(models.CreditCardTransaction).filter(
-        models.CreditCardTransaction.id == transacao_id
-    ).first()
+
+def delete_expense(db: Session, expense_id: int) -> bool:
+    expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    if not expense:
+        return False
+    db.delete(expense)
+    db.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# CARTÕES DE CRÉDITO
+# ---------------------------------------------------------------------------
+
+def create_credit_card(
+    db: Session, card_in: schemas.CreditCardCreate
+) -> models.CreditCard:
+    card = models.CreditCard(
+        name=card_in.name,
+        closing_day=card_in.closing_day,
+        due_day=card_in.due_day,
+        limit_amount=card_in.limit_amount,
+        is_active=card_in.is_active,
+        logo_url=card_in.logo_url,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def get_all_credit_cards(db: Session):
+    return db.query(models.CreditCard).all()
+
+
+def update_credit_card(
+    db: Session, card_id: int, card_in: schemas.CreditCardCreate
+) -> Optional[models.CreditCard]:
+    card = db.query(models.CreditCard).filter(models.CreditCard.id == card_id).first()
+    if not card:
+        return None
+
+    for field, value in card_in.model_dump().items():
+        setattr(card, field, value)
+
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def delete_credit_card(db: Session, card_id: int) -> bool:
+    card = db.query(models.CreditCard).filter(models.CreditCard.id == card_id).first()
+    if not card:
+        return False
+    db.delete(card)
+    db.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# TRANSAÇÕES DE CARTÃO
+# ---------------------------------------------------------------------------
+
+def create_credit_card_transaction_with_installments(
+    db: Session, tx_in: schemas.CreditCardTransactionCreate
+) -> models.CreditCardTransaction:
+    """
+    Cria uma transação de cartão e gera as parcelas.
+    """
+    tx = models.CreditCardTransaction(
+        card_id=tx_in.card_id,
+        description=tx_in.description,
+        purchase_date=tx_in.purchase_date,
+        amount=tx_in.amount,
+        total_installments=tx_in.total_installments,
+        category=tx_in.category,
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+
+    if tx_in.total_installments and tx_in.total_installments > 1:
+        amount_per_installment = tx_in.amount / tx_in.total_installments
+        for installment_number in range(1, tx_in.total_installments + 1):
+            installment_due_date = add_months(
+                tx_in.first_due_date, installment_number - 1
+            )
+            installment = models.CreditCardInstallment(
+                transaction_id=tx.id,
+                installment_number=installment_number,
+                amount=amount_per_installment,
+                due_date=installment_due_date,
+                paid=False,
+            )
+            db.add(installment)
+        db.commit()
+
+    return tx
+
+
+def get_all_credit_card_transactions(db: Session):
+    return db.query(models.CreditCardTransaction).all()
+
+
+def update_credit_card_transaction(
+    db: Session,
+    tx_id: int,
+    tx_in: schemas.CreditCardTransactionCreate,
+) -> Optional[models.CreditCardTransaction]:
+    tx = (
+        db.query(models.CreditCardTransaction)
+        .filter(models.CreditCardTransaction.id == tx_id)
+        .first()
+    )
+    if not tx:
+        return None
+
+    for field, value in tx_in.model_dump().items():
+        setattr(tx, field, value)
+
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+def delete_credit_card_transaction(db: Session, tx_id: int) -> bool:
+    tx = (
+        db.query(models.CreditCardTransaction)
+        .filter(models.CreditCardTransaction.id == tx_id)
+        .first()
+    )
     if not tx:
         return False
     db.delete(tx)
@@ -289,89 +289,17 @@ def delete_transacao_cartao(db: Session, transacao_id: int) -> bool:
     return True
 
 
-# ---------- PARÂMETROS DE RECEITA ----------
+# ---------------------------------------------------------------------------
+# DASHBOARD (exemplo simples)
+# ---------------------------------------------------------------------------
 
-def get_revenue_categories(db: Session):
-    return db.query(models.RevenueCategory).order_by(models.RevenueCategory.name).all()
+def get_dashboard_summary(db: Session) -> dict:
+    total_revenues = db.query(models.Revenue).count()
+    total_expenses = db.query(models.Expense).count()
+    total_cards = db.query(models.CreditCard).count()
 
-
-def create_revenue_category(db: Session, item: schemas.RevenueCategoryCreate):
-    obj = models.RevenueCategory(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
-
-
-def get_revenue_accounts(db: Session):
-    return db.query(models.RevenueAccount).order_by(models.RevenueAccount.name).all()
-
-
-def create_revenue_account(db: Session, item: schemas.RevenueAccountCreate):
-    obj = models.RevenueAccount(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
-
-
-def get_revenue_payment_methods(db: Session):
-    return (
-        db.query(models.RevenuePaymentMethod)
-        .order_by(models.RevenuePaymentMethod.name)
-        .all()
-    )
-
-
-def create_revenue_payment_method(
-    db: Session, item: schemas.RevenuePaymentMethodCreate
-):
-    obj = models.RevenuePaymentMethod(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
-
-
-# ---------- PARÂMETROS DE DESPESA ----------
-
-def get_expense_categories(db: Session):
-    return db.query(models.ExpenseCategory).order_by(models.ExpenseCategory.name).all()
-
-
-def create_expense_category(db: Session, item: schemas.ExpenseCategoryCreate):
-    obj = models.ExpenseCategory(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
-
-
-def get_expense_accounts(db: Session):
-    return db.query(models.ExpenseAccount).order_by(models.ExpenseAccount.name).all()
-
-
-def create_expense_account(db: Session, item: schemas.ExpenseAccountCreate):
-    obj = models.ExpenseAccount(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
-
-
-def get_expense_payment_methods(db: Session):
-    return (
-        db.query(models.ExpensePaymentMethod)
-        .order_by(models.ExpensePaymentMethod.name)
-        .all()
-    )
-
-
-def create_expense_payment_method(
-    db: Session, item: schemas.ExpensePaymentMethodCreate
-):
-    obj = models.ExpensePaymentMethod(**item.dict())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
+    return {
+        "total_revenues": total_revenues,
+        "total_expenses": total_expenses,
+        "total_cards": total_cards,
+    }

@@ -1,61 +1,83 @@
 const API_BASE = "http://localhost:8000";
 
-// Estado em memória
+// ---------- Estado ----------
 let receitasCache = [];
 let despesasCache = [];
 let cartoesCache = [];
 let transacoesCartaoCache = [];
-// filtros de tabela (client-side)
+
 let receitaFilters = {};
 let despesaFilters = {};
 let transacaoCartaoFilters = {};
 
-// parâmetros de receita
 let receitaCategorias = [];
 let receitaContas = [];
 let receitaFormasPagamento = [];
-
-// parâmetros de despesa
 let despesaCategorias = [];
 let despesaContas = [];
 let despesaFormasPagamento = [];
 
-// logos de cartões (ajuste caminhos conforme arquivos que você tiver)
-const CARD_LOGOS = {
-  "nubank": "assets/cards/nubank.png",
-  "nu": "assets/cards/nubank.png",
-  "santander": "assets/cards/santander.png",
-  "itaú": "assets/cards/itau.png",
-  "itau": "assets/cards/itau.png",
-  "inter": "assets/cards/inter.png",
-  "bradesco": "assets/cards/bradesco.png",
-  "c6": "assets/cards/c6.png",
-  "c6 bank": "assets/cards/c6.png",
-  "xp": "assets/cards/xp.png",
-  "pan": "assets/cards/pan.png",
-  "caixa": "assets/cards/caixa.png",
-  "bb": "assets/cards/bb.png",
-  "banco do brasil": "assets/cards/bb.png",
-};
+let dashYearsSelected = [];
+let dashMonthsSelected = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+const MONTH_OPTIONS = [
+  { value: 1, label: "Jan" },
+  { value: 2, label: "Fev" },
+  { value: 3, label: "Mar" },
+  { value: 4, label: "Abr" },
+  { value: 5, label: "Mai" },
+  { value: 6, label: "Jun" },
+  { value: 7, label: "Jul" },
+  { value: 8, label: "Ago" },
+  { value: 9, label: "Set" },
+  { value: 10, label: "Out" },
+  { value: 11, label: "Nov" },
+  { value: 12, label: "Dez" },
+];
+const ALL_MONTH_VALUES = MONTH_OPTIONS.map(({ value }) => value);
 
 let chartRD = null;
-let dashYearsSelected = [];   // [] => todos os anos
-let dashMonthsSelected = [];  // [] => todos os meses
+let chartGastoCartao = null;
+let chartLimiteCartao = null;
 
-// --------- UTILITÁRIOS ---------
+document.addEventListener("DOMContentLoaded", init);
 
+async function init() {
+  setupNavigation();
+  setupFilters();
+  setupSelectAllToggles();
+  setupGlobalSelectionWatcher();
+  setupDashboardFilterControls();
+  setupButtonActions();
+  setupForms();
+  renderMonthFilterOptions();
+
+  await Promise.all([loadParametrosReceita(), loadParametrosDespesa()]);
+  await loadReceitas();
+  await loadDespesas();
+  await loadCartoes();
+  await loadTransacoesCartao();
+}
+
+// ---------- Utils ----------
 async function fetchJSON(url, options = {}) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+
   if (!res.ok) {
     let detail = "";
     try {
       detail = await res.text();
-      console.error("Erro API:", res.status, detail);
-    } catch (_) {}
+    } catch (_) {
+      /* ignore */
+    }
     throw new Error(`Erro na API: ${res.status} ${detail}`);
+  }
+
+  if (res.status === 204) {
+    return null;
   }
   return await res.json();
 }
@@ -65,7 +87,7 @@ function serializeForm(form) {
   const obj = {};
   for (const [key, value] of data.entries()) {
     if (value === "") continue;
-    if (["amount_total", "installments"].includes(key)) {
+    if (["amount_total", "installments", "installment_n"].includes(key)) {
       obj[key] = Number(value);
     } else {
       obj[key] = value;
@@ -81,149 +103,270 @@ function formatCurrency(value) {
   });
 }
 
-function applyFilters(list, filters, extraMapper = null) {
+function applyFilters(list, filters, mapper = null) {
   if (!filters) return list;
-
   return list.filter((item) => {
-    const obj = extraMapper ? extraMapper(item) : item;
+    const current = mapper ? mapper(item) : item;
+    for (const [key, rawValue] of Object.entries(filters)) {
+      if (rawValue === undefined || rawValue === null || rawValue === "") continue;
 
-    for (const [field, value] of Object.entries(filters)) {
-      if (!value) continue;
-      const v = String(value).toLowerCase();
-
-      if (field === "amount_total" || field === "amount_installment") {
-        const num = Number(obj[field] || 0);
-        const min = Number(value);
-        if (!isNaN(min) && num < min) return false;
-      } else if (field === "installment_n") {
-        if (!String(obj[field] || "").includes(value)) return false;
-      } else {
-        const current = String(obj[field] || "").toLowerCase();
-        if (!current.includes(v)) return false;
+      if (key.endsWith("_from")) {
+        const field = key.slice(0, -5);
+        const value = String(rawValue);
+        const candidate = current[field];
+        if (!candidate || String(candidate) < value) return false;
+        continue;
       }
+
+      if (key.endsWith("_to")) {
+        const field = key.slice(0, -3);
+        const value = String(rawValue);
+        const candidate = current[field];
+        if (!candidate || String(candidate) > value) return false;
+        continue;
+      }
+
+      if (key.endsWith("_min")) {
+        const field = key.slice(0, -4);
+        const min = Number(rawValue);
+        if (!Number.isNaN(min) && Number(current[field] || 0) < min) return false;
+        continue;
+      }
+
+      if (key === "installment_n") {
+        if (!String(current[key] || "").includes(rawValue)) return false;
+        continue;
+      }
+
+      const target = String(current[key] || "").toLowerCase();
+      if (!target.includes(String(rawValue).toLowerCase())) return false;
     }
     return true;
   });
 }
 
 function getSelectedIdsFromTable(tableId) {
-  const checkboxes = document.querySelectorAll(
-    `#${tableId} tbody .row-select:checked`
-  );
-  return Array.from(checkboxes).map((cb) => Number(cb.dataset.id));
+  return Array.from(
+    document.querySelectorAll(`#${tableId} tbody .row-select:checked`)
+  ).map((cb) => Number(cb.dataset.id));
 }
 
+function highlightSelectedRows() {
+  document.querySelectorAll(".data-table tbody tr").forEach((tr) => {
+    const checkbox = tr.querySelector(".row-select");
+    tr.classList.toggle("row-selected", Boolean(checkbox && checkbox.checked));
+  });
+}
 
-// --------- FILTRO / DASHBOARD ---------
+function renderTablePlaceholder(tbody, message) {
+  if (!tbody) return;
+  const table = tbody.closest("table");
+  const colSpan = table ? table.querySelectorAll("thead th").length || 1 : 1;
+  tbody.innerHTML = `<tr><td class="table-placeholder" colspan="${colSpan}">${message}</td></tr>`;
+}
 
-// filtra lista por anos + meses selecionados
-function filterByYearAndMonths(list, yearsArr, monthsArr) {
-  const useYears = yearsArr && yearsArr.length > 0;
-  const useMonths = monthsArr && monthsArr.length > 0;
+function getFiltersStore(tableKey) {
+  switch (tableKey) {
+    case "receitas":
+      return receitaFilters;
+    case "despesas":
+      return despesaFilters;
+    case "transacoes-cartao":
+      return transacaoCartaoFilters;
+    default:
+      return null;
+  }
+}
 
+function rerenderTable(tableKey) {
+  if (tableKey === "receitas") {
+    renderReceitasTable();
+  } else if (tableKey === "despesas") {
+    renderDespesasTable();
+  } else if (tableKey === "transacoes-cartao") {
+    renderTransacoesCartaoTable();
+  }
+}
+
+function updateFilterInputVisual(input) {
+  if (!input) return;
+  input.classList.toggle("filter-active", Boolean(input.value));
+}
+
+function clearFilters(tableKey) {
+  const store = getFiltersStore(tableKey);
+  if (!store) return;
+  Object.keys(store).forEach((key) => delete store[key]);
+  document
+    .querySelectorAll(`.filter-input[data-table="${tableKey}"]`)
+    .forEach((input) => {
+      input.value = "";
+      updateFilterInputVisual(input);
+    });
+  rerenderTable(tableKey);
+}
+
+function requireSingleSelection(ids, entity) {
+  if (ids.length !== 1) {
+    if (!ids.length) {
+      alert(`Selecione um(a) ${entity}.`);
+    } else {
+      alert(`Selecione apenas 1 ${entity} para editar.`);
+    }
+    return false;
+  }
+  return true;
+}
+
+function setupBulkDeleteButton({
+  buttonId,
+  tableId,
+  entityLabel,
+  apiPathBuilder,
+  reloadFns,
+  successMessage,
+}) {
+  const button = document.getElementById(buttonId);
+  if (!button) return;
+
+  button.addEventListener("click", async () => {
+    const ids = getSelectedIdsFromTable(tableId);
+    if (!ids.length) return;
+    const confirmMessage = `Tem certeza que deseja excluir ${ids.length} ${entityLabel}(s)?`;
+    if (!confirm(confirmMessage)) return;
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          fetchJSON(apiPathBuilder(id), {
+            method: "DELETE",
+          })
+        )
+      );
+      for (const fn of reloadFns) {
+        await fn();
+      }
+      alert(successMessage.replace("{n}", ids.length));
+    } catch (err) {
+      console.error(err);
+      alert(`Erro ao excluir ${entityLabel}(s).`);
+    }
+  });
+}
+
+// ---------- Dashboard ----------
+function filterByYearAndMonths(list, years, months) {
+  const useYears = years.length > 0;
+  const useMonths = months.length > 0;
   return list.filter((item) => {
     if (!item.due_date) return false;
-
+    if (!useYears) return false;
+    if (!useMonths) return false;
     const year = parseInt(item.due_date.slice(0, 4), 10);
     const month = parseInt(item.due_date.slice(5, 7), 10);
-
-    if (useYears && !yearsArr.includes(year)) return false;
-    if (useMonths && !monthsArr.includes(month)) return false;
-
+    if (useYears && !years.includes(year)) return false;
+    if (useMonths && !months.includes(month)) return false;
     return true;
   });
 }
 
-// monta opções de ano com base nos dados
 function buildYearFilterOptions() {
-  const select = document.getElementById("filter-year");
-  if (!select) return;
+  const container = document.getElementById("filter-year-group");
+  if (!container) return;
 
   const yearsSet = new Set();
-  const all = [...receitasCache, ...despesasCache];
-
-  all.forEach((item) => {
-    if (item.due_date) {
-      yearsSet.add(item.due_date.slice(0, 4)); // "YYYY"
-    }
+  [...receitasCache, ...despesasCache].forEach((item) => {
+    if (item.due_date) yearsSet.add(item.due_date.slice(0, 4));
   });
 
-  // fallback: se não tiver nada no banco, usa o ano atual
   if (!yearsSet.size) {
     yearsSet.add(String(new Date().getFullYear()));
   }
 
-  const years = Array.from(yearsSet)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const years = Array.from(yearsSet).map(Number).sort((a, b) => a - b);
+  dashYearsSelected = dashYearsSelected.filter((year) => years.includes(year));
 
-  const currentYear = new Date().getFullYear();
-  let defaultYears;
-
-  if (dashYearsSelected && dashYearsSelected.length) {
-    defaultYears = [...dashYearsSelected];
-  } else if (years.includes(currentYear)) {
-    defaultYears = [currentYear];
-  } else {
-    // se o ano atual não estiver nos dados, pega o último ano disponível
-    defaultYears = [years[years.length - 1]];
+  if (!dashYearsSelected.length && years.length) {
+    const currentYear = new Date().getFullYear();
+    dashYearsSelected = years.includes(currentYear) ? [currentYear] : [years.at(-1)];
   }
 
-  select.innerHTML = "";
-  years.forEach((y) => {
-    const opt = document.createElement("option");
-    opt.value = String(y);
-    opt.textContent = y;
-    if (defaultYears.includes(y)) opt.selected = true;
-    select.appendChild(opt);
-  });
+  container.innerHTML = "";
+  years.forEach((year) => {
+    const label = document.createElement("label");
+    label.className = "filter-pill";
 
-  dashYearsSelected = defaultYears;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "filter-checkbox-year";
+    input.value = String(year);
+    input.checked = dashYearsSelected.includes(year);
+
+    const span = document.createElement("span");
+    span.textContent = year;
+
+    label.appendChild(input);
+    label.appendChild(span);
+    container.appendChild(label);
+  });
 }
 
-// dados para o gráfico (agrega meses nos anos selecionados)
-function getYearData(yearsArr) {
-  const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-  const allReceitas = new Array(12).fill(0);
-  const allDespesas = new Array(12).fill(0);
+function renderMonthFilterOptions() {
+  const container = document.getElementById("filter-months-group");
+  if (!container) return;
+  container.innerHTML = "";
 
-  const useYears = yearsArr && yearsArr.length > 0;
+  MONTH_OPTIONS.forEach(({ value, label }) => {
+    const pill = document.createElement("label");
+    pill.className = "filter-pill";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "filter-checkbox-month";
+    input.value = String(value);
+    input.checked = dashMonthsSelected.includes(value);
+
+    const span = document.createElement("span");
+    span.textContent = label;
+
+    pill.appendChild(input);
+    pill.appendChild(span);
+    container.appendChild(pill);
+  });
+}
+
+function getYearChartData(years) {
+  const labelsBase = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const receitas = new Array(12).fill(0);
+  const despesas = new Array(12).fill(0);
+  const restrict = years.length > 0;
 
   receitasCache.forEach((r) => {
     if (!r.due_date) return;
     const year = parseInt(r.due_date.slice(0, 4), 10);
-    const m = parseInt(r.due_date.slice(5, 7), 10) - 1;
-    if (m < 0 || m > 11) return;
-    if (useYears && !yearsArr.includes(year)) return;
-    allReceitas[m] += Number(r.amount_total || 0);
+    if (restrict && !years.includes(year)) return;
+    const idx = parseInt(r.due_date.slice(5, 7), 10) - 1;
+    if (idx >= 0) receitas[idx] += Number(r.amount_total || 0);
   });
 
   despesasCache.forEach((d) => {
     if (!d.due_date) return;
     const year = parseInt(d.due_date.slice(0, 4), 10);
-    const m = parseInt(d.due_date.slice(5, 7), 10) - 1;
-    if (m < 0 || m > 11) return;
-    if (useYears && !yearsArr.includes(year)) return;
-    allDespesas[m] += Number(d.amount_total || 0);
+    if (restrict && !years.includes(year)) return;
+    const idx = parseInt(d.due_date.slice(5, 7), 10) - 1;
+    if (idx >= 0) despesas[idx] += Number(d.amount_total || 0);
   });
 
   const months =
-    dashMonthsSelected.length
+    dashMonthsSelected.length > 0
       ? [...dashMonthsSelected].sort((a, b) => a - b)
       : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-  const labels = [];
-  const receitas = [];
-  const despesas = [];
-
-  months.forEach((m) => {
-    const idx = m - 1;
-    labels.push(monthNames[idx]);
-    receitas.push(allReceitas[idx]);
-    despesas.push(allDespesas[idx]);
-  });
-
-  return { labels, receitas, despesas };
+  const labels = months.map((m) => labelsBase[m - 1]);
+  return {
+    labels,
+    receitas: months.map((m) => receitas[m - 1]),
+    despesas: months.map((m) => despesas[m - 1]),
+  };
 }
 
 function updateDashboardChart() {
@@ -232,43 +375,27 @@ function updateDashboardChart() {
   if (!canvas) return;
 
   const ctx = canvas.getContext("2d");
-  const { labels, receitas, despesas } = getYearData(dashYearsSelected);
+  const { labels, receitas, despesas } = getYearChartData(dashYearsSelected);
 
   if (chartRD) chartRD.destroy();
-
   chartRD = new Chart(ctx, {
     type: "bar",
     data: {
       labels,
       datasets: [
-        {
-          label: "Receitas",
-          backgroundColor: "#10b981",
-          data: receitas,
-        },
-        {
-          label: "Despesas",
-          backgroundColor: "#ef4444",
-          data: despesas,
-        },
+        { label: "Receitas", backgroundColor: "#10b981", data: receitas },
+        { label: "Despesas", backgroundColor: "#ef4444", data: despesas },
       ],
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: {
-          position: "top",
-        },
-      },
-      scales: {
-        y: { beginAtZero: true },
-      },
+      plugins: { legend: { position: "top" } },
+      scales: { y: { beginAtZero: true } },
     },
   });
 }
 
 function updateDashboard() {
-  // Período filtrado (anos + meses)
   const receitasPeriodo = filterByYearAndMonths(
     receitasCache,
     dashYearsSelected,
@@ -281,41 +408,45 @@ function updateDashboard() {
   );
 
   const totalReceitasPeriodo = receitasPeriodo.reduce(
-    (acc, r) => acc + Number(r.amount_total || 0),
+    (sum, r) => sum + Number(r.amount_total || 0),
     0
   );
   const totalDespesasPeriodo = despesasPeriodo.reduce(
-    (acc, d) => acc + Number(d.amount_total || 0),
+    (sum, d) => sum + Number(d.amount_total || 0),
     0
   );
 
-  // Fechamento anual = anos selecionados, todos os meses
-  const receitasAno = filterByYearAndMonths(receitasCache, dashYearsSelected, []);
-  const despesasAno = filterByYearAndMonths(despesasCache, dashYearsSelected, []);
+  const receitasAno = filterByYearAndMonths(
+    receitasCache,
+    dashYearsSelected,
+    ALL_MONTH_VALUES
+  );
+  const despesasAno = filterByYearAndMonths(
+    despesasCache,
+    dashYearsSelected,
+    ALL_MONTH_VALUES
+  );
 
   const totalReceitasAno = receitasAno.reduce(
-    (acc, r) => acc + Number(r.amount_total || 0),
+    (sum, r) => sum + Number(r.amount_total || 0),
     0
   );
   const totalDespesasAno = despesasAno.reduce(
-    (acc, d) => acc + Number(d.amount_total || 0),
+    (sum, d) => sum + Number(d.amount_total || 0),
     0
   );
 
-  // Caixa real (histórico pago)
-  const totalReceitasPagas = receitasCache
+  const receitasPagas = receitasCache
     .filter((r) => r.payment_date)
-    .reduce((acc, r) => acc + Number(r.amount_total || 0), 0);
-
-  const totalDespesasPagas = despesasCache
+    .reduce((sum, r) => sum + Number(r.amount_total || 0), 0);
+  const despesasPagas = despesasCache
     .filter((d) => d.payment_date)
-    .reduce((acc, d) => acc + Number(d.amount_total || 0), 0);
+    .reduce((sum, d) => sum + Number(d.amount_total || 0), 0);
 
-  const caixa = totalReceitasPagas - totalDespesasPagas;
+  const caixa = receitasPagas - despesasPagas;
   const caixaMensal = totalReceitasPeriodo - totalDespesasPeriodo;
   const fechamentoAnual = totalReceitasAno - totalDespesasAno;
 
-  // Atualiza os 3 cards
   const elCaixa = document.getElementById("dash-total-receitas");
   const elCaixaMensal = document.getElementById("dash-total-despesas");
   const elFechAnual = document.getElementById("dash-saldo");
@@ -324,124 +455,95 @@ function updateDashboard() {
   if (elCaixaMensal) elCaixaMensal.textContent = formatCurrency(caixaMensal);
   if (elFechAnual) elFechAnual.textContent = formatCurrency(fechamentoAnual);
 
-  // Atualiza o gráfico
   updateDashboardChart();
 }
 
-// --------- PARÂMETROS DE RECEITA ---------
-
+// ---------- Parâmetros ----------
 async function loadParametrosReceita() {
   try {
-    const [cats, contas, fps] = await Promise.all([
-      fetchJSON(API_BASE + "/api/receita/categorias"),
-      fetchJSON(API_BASE + "/api/receita/contas"),
-      fetchJSON(API_BASE + "/api/receita/formas-pagamento"),
+    const [cats, contas, formas] = await Promise.all([
+      fetchJSON(`${API_BASE}/api/receita/categorias`),
+      fetchJSON(`${API_BASE}/api/receita/contas`),
+      fetchJSON(`${API_BASE}/api/receita/formas-pagamento`),
     ]);
-
     receitaCategorias = cats;
     receitaContas = contas;
-    receitaFormasPagamento = fps;
-
-    const ulCat = document.getElementById("lista-cat-receita");
-    const ulConta = document.getElementById("lista-conta-receita");
-    const ulFP = document.getElementById("lista-fp-receita");
-
-    if (ulCat) ulCat.innerHTML = cats.map((c) => `<li>${c.name}</li>`).join("");
-    if (ulConta) ulConta.innerHTML = contas.map((c) => `<li>${c.name}</li>`).join("");
-    if (ulFP) ulFP.innerHTML = fps.map((c) => `<li>${c.name}</li>`).join("");
-
-    updateDatalistsReceita();
-  } catch (e) {
-    console.error("Erro ao carregar parâmetros de receita", e);
+    receitaFormasPagamento = formas;
+    updateReceitaParamViews();
+  } catch (err) {
+    console.error("Erro ao carregar parâmetros de receita", err);
+    alert("Não foi possível carregar os parâmetros de receita.");
   }
 }
 
-function updateDatalistsReceita() {
+function updateReceitaParamViews() {
+  const ulCat = document.getElementById("lista-cat-receita");
+  const ulConta = document.getElementById("lista-conta-receita");
+  const ulFP = document.getElementById("lista-fp-receita");
+
+  if (ulCat) ulCat.innerHTML = receitaCategorias.map((c) => `<li>${c.name}</li>`).join("");
+  if (ulConta) ulConta.innerHTML = receitaContas.map((c) => `<li>${c.name}</li>`).join("");
+  if (ulFP) ulFP.innerHTML = receitaFormasPagamento.map((c) => `<li>${c.name}</li>`).join("");
+
   const dlCat = document.getElementById("dl-categorias-receita");
   const dlConta = document.getElementById("dl-contas-receita");
   const dlFP = document.getElementById("dl-fp-receita");
 
-  if (dlCat) {
-    dlCat.innerHTML = receitaCategorias
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
-  if (dlConta) {
-    dlConta.innerHTML = receitaContas
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
-  if (dlFP) {
-    dlFP.innerHTML = receitaFormasPagamento
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
+  if (dlCat) dlCat.innerHTML = receitaCategorias.map((c) => `<option value="${c.name}"></option>`).join("");
+  if (dlConta) dlConta.innerHTML = receitaContas.map((c) => `<option value="${c.name}"></option>`).join("");
+  if (dlFP) dlFP.innerHTML = receitaFormasPagamento.map((c) => `<option value="${c.name}"></option>`).join("");
 }
-
-// --------- PARÂMETROS DE DESPESA ---------
 
 async function loadParametrosDespesa() {
   try {
-    const [cats, contas, fps] = await Promise.all([
-      fetchJSON(API_BASE + "/api/despesa/categorias"),
-      fetchJSON(API_BASE + "/api/despesa/contas"),
-      fetchJSON(API_BASE + "/api/despesa/formas-pagamento"),
+    const [cats, contas, formas] = await Promise.all([
+      fetchJSON(`${API_BASE}/api/despesa/categorias`),
+      fetchJSON(`${API_BASE}/api/despesa/contas`),
+      fetchJSON(`${API_BASE}/api/despesa/formas-pagamento`),
     ]);
-
     despesaCategorias = cats;
     despesaContas = contas;
-    despesaFormasPagamento = fps;
-
-    const ulCat = document.getElementById("lista-cat-despesa");
-    const ulConta = document.getElementById("lista-conta-despesa");
-    const ulFP = document.getElementById("lista-fp-despesa");
-
-    if (ulCat) ulCat.innerHTML = cats.map((c) => `<li>${c.name}</li>`).join("");
-    if (ulConta) ulConta.innerHTML = contas.map((c) => `<li>${c.name}</li>`).join("");
-    if (ulFP) ulFP.innerHTML = fps.map((c) => `<li>${c.name}</li>`).join("");
-
-    updateDatalistsDespesa();
-  } catch (e) {
-    console.error("Erro ao carregar parâmetros de despesa", e);
+    despesaFormasPagamento = formas;
+    updateDespesaParamViews();
+  } catch (err) {
+    console.error("Erro ao carregar parâmetros de despesa", err);
+     alert("Não foi possível carregar os parâmetros de despesa.");
   }
 }
 
-function updateDatalistsDespesa() {
+function updateDespesaParamViews() {
+  const ulCat = document.getElementById("lista-cat-despesa");
+  const ulConta = document.getElementById("lista-conta-despesa");
+  const ulFP = document.getElementById("lista-fp-despesa");
+
+  if (ulCat) ulCat.innerHTML = despesaCategorias.map((c) => `<li>${c.name}</li>`).join("");
+  if (ulConta) ulConta.innerHTML = despesaContas.map((c) => `<li>${c.name}</li>`).join("");
+  if (ulFP) ulFP.innerHTML = despesaFormasPagamento.map((c) => `<li>${c.name}</li>`).join("");
+
   const dlCat = document.getElementById("dl-categorias-despesa");
   const dlConta = document.getElementById("dl-contas-despesa");
   const dlFP = document.getElementById("dl-fp-despesa");
 
-  if (dlCat) {
-    dlCat.innerHTML = despesaCategorias
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
-  if (dlConta) {
-    dlConta.innerHTML = despesaContas
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
-  if (dlFP) {
-    dlFP.innerHTML = despesaFormasPagamento
-      .map((c) => `<option value="${c.name}"></option>`)
-      .join("");
-  }
+  if (dlCat) dlCat.innerHTML = despesaCategorias.map((c) => `<option value="${c.name}"></option>`).join("");
+  if (dlConta) dlConta.innerHTML = despesaContas.map((c) => `<option value="${c.name}"></option>`).join("");
+  if (dlFP) dlFP.innerHTML = despesaFormasPagamento.map((c) => `<option value="${c.name}"></option>`).join("");
 }
 
-// --------- LISTAGENS RECEITAS / DESPESAS ---------
-
+// ---------- Receitas / Despesas ----------
 async function loadReceitas() {
   const tbody = document.querySelector("#table-receitas tbody");
-  if (tbody) tbody.innerHTML = "";
+  renderTablePlaceholder(tbody, "Carregando receitas...");
   try {
-    const itens = await fetchJSON(API_BASE + "/api/receitas");
-    receitasCache = itens;
+    receitasCache = await fetchJSON(`${API_BASE}/api/receitas`);
     renderReceitasTable();
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error(err);
+    renderTablePlaceholder(tbody, "Erro ao carregar receitas.");
+    alert("Não foi possível carregar as receitas. Verifique sua conexão.");
   } finally {
     buildYearFilterOptions();
     updateDashboard();
+    updateActionButtons();
   }
 }
 
@@ -451,46 +553,42 @@ function renderReceitasTable() {
   tbody.innerHTML = "";
 
   const list = applyFilters(receitasCache, receitaFilters);
+  if (!list.length) {
+    renderTablePlaceholder(tbody, "Nenhuma receita encontrada.");
+    return;
+  }
 
   list.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>
-        <input
-          type="checkbox"
-          class="row-select row-select-receita"
-          data-id="${item.id}"
-        />
-      </td>
+      <td><input type="checkbox" class="row-select row-select-receita" data-id="${item.id}" /></td>
       <td>${item.due_date || ""}</td>
       <td>${item.description || ""}</td>
       <td>${item.category || ""}</td>
       <td>${formatCurrency(item.amount_total)}</td>
       <td>
-        <input
-          type="date"
-          class="input-pagamento-receita"
-          data-id="${item.id}"
-          value="${item.payment_date || ""}"
-        />
+        <input type="date" class="input-pagamento-receita" data-id="${item.id}" value="${item.payment_date || ""}" />
       </td>
     `;
     tbody.appendChild(tr);
   });
+  highlightSelectedRows();
 }
 
 async function loadDespesas() {
   const tbody = document.querySelector("#table-despesas tbody");
-  if (tbody) tbody.innerHTML = "";
+  renderTablePlaceholder(tbody, "Carregando despesas...");
   try {
-    const itens = await fetchJSON(API_BASE + "/api/despesas");
-    despesasCache = itens;
+    despesasCache = await fetchJSON(`${API_BASE}/api/despesas`);
     renderDespesasTable();
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error(err);
+    renderTablePlaceholder(tbody, "Erro ao carregar despesas.");
+    alert("Não foi possível carregar as despesas. Verifique sua conexão.");
   } finally {
     buildYearFilterOptions();
     updateDashboard();
+    updateActionButtons();
   }
 }
 
@@ -500,108 +598,109 @@ function renderDespesasTable() {
   tbody.innerHTML = "";
 
   const list = applyFilters(despesasCache, despesaFilters);
+  if (!list.length) {
+    renderTablePlaceholder(tbody, "Nenhuma despesa encontrada.");
+    return;
+  }
 
   list.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>
-        <input
-          type="checkbox"
-          class="row-select row-select-despesa"
-          data-id="${item.id}"
-        />
-      </td>
+      <td><input type="checkbox" class="row-select row-select-despesa" data-id="${item.id}" /></td>
       <td>${item.due_date || ""}</td>
       <td>${item.description || ""}</td>
       <td>${item.category || ""}</td>
       <td>${formatCurrency(item.amount_total)}</td>
       <td>
-        <input
-          type="date"
-          class="input-pagamento-despesa"
-          data-id="${item.id}"
-          value="${item.payment_date || ""}"
-        />
+        <input type="date" class="input-pagamento-despesa" data-id="${item.id}" value="${item.payment_date || ""}" />
       </td>
     `;
     tbody.appendChild(tr);
   });
+  highlightSelectedRows();
 }
 
-renderDespesasTable
-
-// --------- CARTÕES ---------
-
-function getCardLogo(name) {
-  if (!name) return null;
-  const nameLower = name.toLowerCase();
-  for (const key in CARD_LOGOS) {
-    if (nameLower.includes(key)) return CARD_LOGOS[key];
-  }
-  return null;
-}
-
+// ---------- Cartões ----------
 async function loadCartoes() {
   const tbody = document.querySelector("#table-cartoes tbody");
-  const selectCartao = document.getElementById("select-cartao-transacao");
-
-  if (tbody) tbody.innerHTML = "";
-  if (selectCartao) {
-    selectCartao.innerHTML = `<option value="">Selecione um cartão</option>`;
-  }
-
+  renderTablePlaceholder(tbody, "Carregando cartões...");
   try {
-    const itens = await fetchJSON(API_BASE + "/api/cartoes");
-    cartoesCache = itens;
-
-    if (tbody) {
-      itens.forEach((item) => {
-        const tr = document.createElement("tr");
-        const logo = getCardLogo(item.name);
-        const logoHtml = logo
-          ? `<img src="${logo}" class="logo-cartao" />`
-          : "💳";
-
-        tr.innerHTML = `
-          <td>${logoHtml} ${item.name}</td>
-          <td>${item.closing_day}</td>
-          <td>${item.due_day}</td>
-          <td>${item.limit_total != null ? formatCurrency(item.limit_total) : "-"}</td>
-          <td>${item.status}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      if (!itens.length) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="5">Nenhum cartão cadastrado.</td>`;
-        tbody.appendChild(tr);
-      }
-    }
-
-    if (selectCartao) {
-      itens.forEach((item) => {
-        const opt = document.createElement("option");
-        opt.value = item.id;
-        opt.textContent = item.name;
-        selectCartao.appendChild(opt);
-      });
-    }
-  } catch (e) {
-  console.error(e);
+    cartoesCache = await fetchJSON(`${API_BASE}/api/cartoes`);
+    renderCartoesTable();
+    populateCartaoSelect();
+    updateCardCharts();
+  } catch (err) {
+    console.error(err);
+    renderTablePlaceholder(tbody, "Erro ao carregar cartões.");
+    alert("Não foi possível carregar os cartões. Verifique sua conexão.");
+  } finally {
+    updateActionButtons();
   }
+}
+
+function renderCartoesTable() {
+  const tbody = document.querySelector("#table-cartoes tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!cartoesCache.length) {
+    renderTablePlaceholder(tbody, "Nenhum cartão cadastrado.");
+    return;
+  }
+
+  cartoesCache.forEach((card) => {
+    const initials = (card.name || card.cartao || "")
+      .toString()
+      .trim()
+      .slice(0, 2)
+      .toUpperCase() || "--";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="checkbox" class="row-select row-select-cartao" data-id="${card.id}" /></td>
+      <td>
+        <div class="card-logo-wrap">
+          <div class="card-logo-badge">${initials}</div>
+          <span>${card.name || card.cartao}</span>
+        </div>
+      </td>
+      <td>${card.closing_day ?? ""}</td>
+      <td>${card.due_day ?? ""}</td>
+      <td>${card.limit_total != null ? formatCurrency(card.limit_total) : "-"}</td>
+      <td>${card.status ?? ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  highlightSelectedRows();
+}
+
+function populateCartaoSelect() {
+  const select = document.getElementById("select-cartao-transacao");
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">Selecione um cartão</option>`;
+  cartoesCache.forEach((card) => {
+    const opt = document.createElement("option");
+    opt.value = card.id;
+    opt.textContent = card.name || card.cartao;
+    select.appendChild(opt);
+  });
+  if (current) select.value = current;
 }
 
 async function loadTransacoesCartao() {
   const tbody = document.querySelector("#table-transacoes-cartao tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
+  renderTablePlaceholder(tbody, "Carregando lançamentos...");
   try {
-    const itens = await fetchJSON(API_BASE + "/api/transacoes-cartao");
-    transacoesCartaoCache = itens;
+    transacoesCartaoCache = await fetchJSON(`${API_BASE}/api/transacoes-cartao`);
     renderTransacoesCartaoTable();
-  } catch (e) {
-    console.error(e);
+  } catch (err) {
+    console.error(err);
+    renderTablePlaceholder(tbody, "Erro ao carregar lançamentos.");
+    alert("Não foi possível carregar os lançamentos de cartão. Verifique sua conexão.");
+  } finally {
+    updateCardCharts();
+    updateActionButtons();
   }
 }
 
@@ -612,231 +711,261 @@ function renderTransacoesCartaoTable() {
 
   const list = applyFilters(transacoesCartaoCache, transacaoCartaoFilters, (item) => {
     const cartao = cartoesCache.find((c) => c.id === item.credit_card_id);
-    return {
-      ...item,
-      cartao: cartao ? cartao.name : "",
-    };
+    return { ...item, cartao: cartao ? cartao.name : "" };
   });
+
+  if (!list.length) {
+    renderTablePlaceholder(tbody, "Nenhum lançamento de cartão.");
+    return;
+  }
 
   list.forEach((item) => {
     const cartao = cartoesCache.find((c) => c.id === item.credit_card_id);
-    const nomeCartao = cartao ? cartao.name : `#${item.credit_card_id}`;
+    const nome = cartao ? cartao.name : `#${item.credit_card_id}`;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>
-        <input
-          type="checkbox"
-          class="row-select row-select-transacao-cartao"
-          data-id="${item.id}"
-        />
-      </td>
+      <td><input type="checkbox" class="row-select row-select-transacao-cartao" data-id="${item.id}" /></td>
       <td>${item.purchase_date || ""}</td>
-      <td>${nomeCartao}</td>
+      <td>${nome}</td>
       <td>${item.description || ""}</td>
       <td>${item.installment_n} de ${item.installments}</td>
       <td>${formatCurrency(item.amount_installment)}</td>
     `;
     tbody.appendChild(tr);
   });
-
-  if (!list.length) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6">Nenhuma transação registrada.</td>`;
-    tbody.appendChild(tr);
-  }
+  highlightSelectedRows();
 }
 
-// --------- NAVEGAÇÃO ---------
+function updateCardCharts() {
+  if (typeof Chart === "undefined") return;
+  const gastoCanvas = document.getElementById("chart-gasto-cartao");
+  const limiteCanvas = document.getElementById("chart-limite-cartao");
+  if (!gastoCanvas || !limiteCanvas) return;
 
+  const gastos = new Map();
+  cartoesCache.forEach((card) => gastos.set(card.id, 0));
+
+  transacoesCartaoCache.forEach((trx) => {
+    if (!gastos.has(trx.credit_card_id)) return;
+    const valor =
+      Number(trx.amount_installment ?? trx.amount_total ?? trx.amount ?? 0);
+    gastos.set(trx.credit_card_id, gastos.get(trx.credit_card_id) + valor);
+  });
+
+  const labels = cartoesCache.map((card) => card.name || card.cartao);
+  const gastoData = cartoesCache.map((card) => gastos.get(card.id) || 0);
+  const limiteData = cartoesCache.map((card) => Number(card.limit_total || 0));
+  const disponivelData = limiteData.map((lim, idx) =>
+    Math.max(lim - gastoData[idx], 0)
+  );
+
+  if (chartGastoCartao) chartGastoCartao.destroy();
+  if (chartLimiteCartao) chartLimiteCartao.destroy();
+
+  chartGastoCartao = new Chart(gastoCanvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Gasto", data: gastoData, backgroundColor: "#6366f1" }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+
+  chartLimiteCartao = new Chart(limiteCanvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Limite disponível", data: disponivelData, backgroundColor: "#0ea5e9" }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+}
+
+// ---------- Interações ----------
 function setupNavigation() {
-  const menuItems = document.querySelectorAll(".menu-item");
-  const pages = document.querySelectorAll(".page");
-
-  menuItems.forEach((btn) => {
+  document.querySelectorAll(".menu-item").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const page = btn.getAttribute("data-page");
-
-      menuItems.forEach((b) => b.classList.remove("active"));
+      const target = btn.dataset.page;
+      document.querySelectorAll(".menu-item").forEach((item) => item.classList.remove("active"));
       btn.classList.add("active");
 
-      pages.forEach((section) => {
-        if (section.id === "page-" + page) {
-          section.classList.add("visible");
-        } else {
-          section.classList.remove("visible");
-        }
+      document.querySelectorAll(".page").forEach((section) => {
+        section.classList.toggle("visible", section.id === `page-${target}`);
       });
     });
   });
 }
 
-// --------- INICIALIZAÇÃO / EVENTOS ---------
-
-document.addEventListener("DOMContentLoaded", () => {
-  setupNavigation();
-
-  // Filtros por coluna
-  document.addEventListener("input", (e) => {
-    const target = e.target;
+function setupFilters() {
+  const handleFilterChange = (event) => {
+    const target = event.target;
     if (!target.classList.contains("filter-input")) return;
-
     const table = target.dataset.table;
+    const store = getFiltersStore(table);
+    if (!store) return;
+
     const field = target.dataset.field;
-    const value = target.value;
+    const filterType = target.dataset.filterType || "text";
+    let key = field;
+    if (filterType === "date-from") key = `${field}_from`;
+    if (filterType === "date-to") key = `${field}_to`;
+    if (filterType === "number-min") key = `${field}_min`;
 
-    if (table === "receitas") {
-      receitaFilters[field] = value;
-      renderReceitasTable();
-    } else if (table === "despesas") {
-      despesaFilters[field] = value;
-      renderDespesasTable();
-    } else if (table === "transacoes-cartao") {
-      transacaoCartaoFilters[field] = value;
-      renderTransacoesCartaoTable();
+    if (target.value) {
+      store[key] = target.value;
+    } else {
+      delete store[key];
+    }
+    updateFilterInputVisual(target);
+    rerenderTable(table);
+  };
+
+  document.addEventListener("input", handleFilterChange);
+  document.addEventListener("change", handleFilterChange);
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".btn-clear-filters");
+    if (!button) return;
+    clearFilters(button.dataset.table);
+  });
+}
+
+function setupSelectAllToggles() {
+  const configs = [
+    { id: "chk-all-receitas", selector: "#table-receitas tbody .row-select-receita" },
+    { id: "chk-all-despesas", selector: "#table-despesas tbody .row-select-despesa" },
+    { id: "chk-all-cartoes", selector: "#table-cartoes tbody .row-select-cartao" },
+    {
+      id: "chk-all-transacoes-cartao",
+      selector: "#table-transacoes-cartao tbody .row-select-transacao-cartao",
+    },
+  ];
+
+  configs.forEach(({ id, selector }) => {
+    const checkbox = document.getElementById(id);
+    if (!checkbox) return;
+    checkbox.addEventListener("change", () => {
+      document.querySelectorAll(selector).forEach((cb) => {
+        cb.checked = checkbox.checked;
+      });
+      updateActionButtons();
+    });
+  });
+}
+
+function setupDashboardFilterControls() {
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target.classList.contains("filter-checkbox-year")) {
+      const value = parseInt(target.value, 10);
+      if (target.checked) {
+        if (!dashYearsSelected.includes(value)) dashYearsSelected.push(value);
+      } else {
+        dashYearsSelected = dashYearsSelected.filter((year) => year !== value);
+      }
+      dashYearsSelected.sort((a, b) => a - b);
+      updateDashboard();
+    }
+
+    if (target.classList.contains("filter-checkbox-month")) {
+      const value = parseInt(target.value, 10);
+      if (target.checked) {
+        if (!dashMonthsSelected.includes(value)) dashMonthsSelected.push(value);
+      } else {
+        dashMonthsSelected = dashMonthsSelected.filter((month) => month !== value);
+      }
+      dashMonthsSelected.sort((a, b) => a - b);
+      updateDashboard();
     }
   });
+}
 
-  // Selecionar todos
-  const chkAllReceitas = document.getElementById("chk-all-receitas");
-  if (chkAllReceitas) {
-    chkAllReceitas.addEventListener("change", () => {
-      const checked = chkAllReceitas.checked;
-      document
-        .querySelectorAll("#table-receitas tbody .row-select-receita")
-        .forEach((cb) => (cb.checked = checked));
+function setupGlobalSelectionWatcher() {
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target.classList.contains("row-select")) {
       updateActionButtons();
-    });
-  }
+       highlightSelectedRows();
+    }
 
-  const chkAllDespesas = document.getElementById("chk-all-despesas");
-  if (chkAllDespesas) {
-    chkAllDespesas.addEventListener("change", () => {
-      const checked = chkAllDespesas.checked;
-      document
-        .querySelectorAll("#table-despesas tbody .row-select-despesa")
-        .forEach((cb) => (cb.checked = checked));
-      updateActionButtons();
-    });
-  }
+    if (target.classList.contains("input-pagamento-receita")) {
+      const id = Number(target.dataset.id);
+      const payment_date = target.value || null;
+      fetchJSON(`${API_BASE}/api/receitas/${id}/pagamento`, {
+        method: "PATCH",
+        body: JSON.stringify({ payment_date }),
+      })
+        .then(loadReceitas)
+        .catch(() => alert("Erro ao atualizar pagamento da receita."));
+    }
 
-  const chkAllTrans = document.getElementById("chk-all-transacoes-cartao");
-  if (chkAllTrans) {
-    chkAllTrans.addEventListener("change", () => {
-      const checked = chkAllTrans.checked;
-      document
-        .querySelectorAll("#table-transacoes-cartao tbody .row-select-transacao-cartao")
-        .forEach((cb) => (cb.checked = checked));
-      updateActionButtons();
-    });
-  }
-
-  // Atualiza botões quando clica em qualquer checkbox de linha
-  document.addEventListener("change", (e) => {
-    if (e.target.classList.contains("row-select")) {
-      updateActionButtons();
+    if (target.classList.contains("input-pagamento-despesa")) {
+      const id = Number(target.dataset.id);
+      const payment_date = target.value || null;
+      fetchJSON(`${API_BASE}/api/despesas/${id}/pagamento`, {
+        method: "PATCH",
+        body: JSON.stringify({ payment_date }),
+      })
+        .then(loadDespesas)
+        .catch(() => alert("Erro ao atualizar pagamento da despesa."));
     }
   });
+}
 
-  function updateActionButtons() {
-    const btnEditReceita = document.getElementById("btn-edit-receita");
-    const btnDelReceita = document.getElementById("btn-delete-receita");
-    const btnEditDespesa = document.getElementById("btn-edit-despesa");
-    const btnDelDespesa = document.getElementById("btn-delete-despesa");
-    const btnDelTrans = document.getElementById("btn-delete-transacao-cartao");
+function setupButtonActions() {
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-receita",
+    tableId: "table-receitas",
+    entityLabel: "receita",
+    apiPathBuilder: (id) => `${API_BASE}/api/receitas/${id}`,
+    reloadFns: [loadReceitas],
+    successMessage: "{n} receita(s) excluída(s) com sucesso!",
+  });
 
-    const selReceitas = getSelectedIdsFromTable("table-receitas");
-    const selDespesas = getSelectedIdsFromTable("table-despesas");
-    const selTrans = getSelectedIdsFromTable("table-transacoes-cartao");
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-despesa",
+    tableId: "table-despesas",
+    entityLabel: "despesa",
+    apiPathBuilder: (id) => `${API_BASE}/api/despesas/${id}`,
+    reloadFns: [loadDespesas],
+    successMessage: "{n} despesa(s) excluída(s) com sucesso!",
+  });
 
-    if (btnEditReceita) btnEditReceita.disabled = selReceitas.length !== 1;
-    if (btnDelReceita) btnDelReceita.disabled = selReceitas.length === 0;
-    if (btnEditDespesa) btnEditDespesa.disabled = selDespesas.length !== 1;
-    if (btnDelDespesa) btnDelDespesa.disabled = selDespesas.length === 0;
-    if (btnDelTrans) btnDelTrans.disabled = selTrans.length === 0;
-  }
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-transacao-cartao",
+    tableId: "table-transacoes-cartao",
+    entityLabel: "lançamento",
+    apiPathBuilder: (id) => `${API_BASE}/api/transacoes-cartao/${id}`,
+    reloadFns: [loadTransacoesCartao, loadDespesas],
+    successMessage: "{n} lançamento(s) excluído(s) com sucesso!",
+  });
 
-  // Botões de excluir / editar
-  const btnDelReceita = document.getElementById("btn-delete-receita");
-  if (btnDelReceita) {
-    btnDelReceita.addEventListener("click", async () => {
-      const ids = getSelectedIdsFromTable("table-receitas");
-      if (!ids.length) return;
-      if (!confirm(`Excluir ${ids.length} receita(s)?`)) return;
-      try {
-        for (const id of ids) {
-          await fetchJSON(`${API_BASE}/api/receitas/${id}`, { method: "DELETE" });
-        }
-        await loadReceitas();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao excluir receitas (verifique se o backend tem o endpoint DELETE /api/receitas/{id}).");
-      }
-    });
-  }
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-cartao",
+    tableId: "table-cartoes",
+    entityLabel: "cartão",
+    apiPathBuilder: (id) => `${API_BASE}/api/cartoes/${id}`,
+    reloadFns: [loadCartoes, loadTransacoesCartao],
+    successMessage: "{n} cartão(ões) excluído(s) com sucesso!",
+  });
 
-  const btnDelDespesa = document.getElementById("btn-delete-despesa");
-  if (btnDelDespesa) {
-    btnDelDespesa.addEventListener("click", async () => {
-      const ids = getSelectedIdsFromTable("table-despesas");
-      if (!ids.length) return;
-      if (!confirm(`Excluir ${ids.length} despesa(s)?`)) return;
-      try {
-        for (const id of ids) {
-          await fetchJSON(`${API_BASE}/api/despesas/${id}`, { method: "DELETE" });
-        }
-        await loadDespesas();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao excluir despesas (verifique se o backend tem o endpoint DELETE /api/despesas/{id}).");
-      }
-    });
-  }
-
-  const btnDelTrans = document.getElementById("btn-delete-transacao-cartao");
-  if (btnDelTrans) {
-    btnDelTrans.addEventListener("click", async () => {
-      const ids = getSelectedIdsFromTable("table-transacoes-cartao");
-      if (!ids.length) return;
-      if (!confirm(`Excluir ${ids.length} lançamento(s) de cartão?`)) return;
-      try {
-        for (const id of ids) {
-          await fetchJSON(`${API_BASE}/api/transacoes-cartao/${id}`, {
-            method: "DELETE",
-          });
-        }
-        await loadTransacoesCartao();
-        await loadDespesas(); // já que as despesas de cartão são espelhadas
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao excluir lançamentos de cartão.");
-      }
-    });
-  }
-
-  // Edição simples: carrega os dados no formulário para ajuste
   const btnEditReceita = document.getElementById("btn-edit-receita");
   if (btnEditReceita) {
     btnEditReceita.addEventListener("click", () => {
       const ids = getSelectedIdsFromTable("table-receitas");
-      if (ids.length !== 1) return;
-      const id = ids[0];
-      const item = receitasCache.find((r) => r.id === id);
-      if (!item) return;
+      if (!requireSingleSelection(ids, "receita")) return;
+      const item = receitasCache.find((r) => r.id === ids[0]);
       const form = document.getElementById("form-receita");
-      if (!form) return;
-
-      form.description.value = item.description || "";
-      form.category.value = item.category || "";
-      form.account.value = item.account || "";
+      if (!item || !form) return;
+      ["description", "category", "account", "payment_method", "notes"].forEach((field) => {
+        form[field].value = item[field] || "";
+      });
       form.due_date.value = item.due_date || "";
       form.payment_date.value = item.payment_date || "";
       form.amount_total.value = item.amount_total || "";
       form.installments.value = item.installments || 1;
-      form.payment_method.value = item.payment_method || "";
-      form.notes.value = item.notes || "";
-
-      form.dataset.editingId = String(id);
-      alert("Edite os campos e clique em Salvar Receita para atualizar.");
+      form.dataset.editingId = String(item.id);
+      alert("Atualize os campos e clique em Salvar receita.");
     });
   }
 
@@ -844,96 +973,104 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnEditDespesa) {
     btnEditDespesa.addEventListener("click", () => {
       const ids = getSelectedIdsFromTable("table-despesas");
-      if (ids.length !== 1) return;
-      const id = ids[0];
-      const item = despesasCache.find((d) => d.id === id);
-      if (!item) return;
+      if (!requireSingleSelection(ids, "despesa")) return;
+      const item = despesasCache.find((d) => d.id === ids[0]);
       const form = document.getElementById("form-despesa");
-      if (!form) return;
-
-      form.description.value = item.description || "";
-      form.category.value = item.category || "";
-      form.account.value = item.account || "";
+      if (!item || !form) return;
+      ["description", "category", "account", "payment_method", "notes"].forEach((field) => {
+        form[field].value = item[field] || "";
+      });
       form.due_date.value = item.due_date || "";
       form.payment_date.value = item.payment_date || "";
       form.amount_total.value = item.amount_total || "";
       form.installments.value = item.installments || 1;
-      form.payment_method.value = item.payment_method || "";
-      form.notes.value = item.notes || "";
-
-      form.dataset.editingId = String(id);
-      alert("Edite os campos e clique em Salvar Despesa para atualizar.");
+      form.dataset.editingId = String(item.id);
+      alert("Atualize os campos e clique em Salvar despesa.");
     });
   }
 
+  const btnEditCartao = document.getElementById("btn-edit-cartao");
+  if (btnEditCartao) {
+    btnEditCartao.addEventListener("click", () => {
+      const ids = getSelectedIdsFromTable("table-cartoes");
+      if (!requireSingleSelection(ids, "cartão")) return;
+      const card = cartoesCache.find((c) => c.id === ids[0]);
+      const form = document.getElementById("form-cartao");
+      if (!card || !form) return;
+      form.dataset.editId = String(card.id);
+      form.name.value = card.name || card.cartao || "";
+      form.closing_day.value = card.closing_day ?? "";
+      form.due_day.value = card.due_day ?? "";
+      form.limit_total.value = card.limit_total ?? "";
+      form.annual_fee.value = card.annual_fee ?? "";
+      form.status.value = card.status || "ativo";
+      form.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+}
 
+function setupForms() {
   const formReceita = document.getElementById("form-receita");
-  const formDespesa = document.getElementById("form-despesa");
-  const formCartao = document.getElementById("form-cartao");
-  const formTransacao = document.getElementById("form-transacao-cartao");
-
   if (formReceita) {
-  formReceita.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const payload = serializeForm(formReceita);
-    const editingId = formReceita.dataset.editingId;
-    try {
-      if (editingId) {
-        await fetchJSON(`${API_BASE}/api/receitas/${editingId}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetchJSON(API_BASE + "/api/receitas", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+    formReceita.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formReceita);
+      const editingId = formReceita.dataset.editingId;
+      try {
+        if (editingId) {
+          await fetchJSON(`${API_BASE}/api/receitas/${editingId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await fetchJSON(`${API_BASE}/api/receitas`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }
+        formReceita.reset();
+        delete formReceita.dataset.editingId;
+        await loadReceitas();
+      } catch (err) {
+        alert("Erro ao salvar receita.");
       }
-      formReceita.reset();
-      delete formReceita.dataset.editingId;
-      await loadReceitas();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar receita (verifique se o backend tem o endpoint PUT /api/receitas/{id}).");
-    }
-  });
-}
+    });
+  }
 
-
+  const formDespesa = document.getElementById("form-despesa");
   if (formDespesa) {
-  formDespesa.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const payload = serializeForm(formDespesa);
-    const editingId = formDespesa.dataset.editingId;
-    try {
-      if (editingId) {
-        await fetchJSON(`${API_BASE}/api/despesas/${editingId}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetchJSON(API_BASE + "/api/despesas", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+    formDespesa.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formDespesa);
+      const editingId = formDespesa.dataset.editingId;
+      try {
+        if (editingId) {
+          await fetchJSON(`${API_BASE}/api/despesas/${editingId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await fetchJSON(`${API_BASE}/api/despesas`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }
+        formDespesa.reset();
+        delete formDespesa.dataset.editingId;
+        await loadDespesas();
+      } catch (err) {
+        alert("Erro ao salvar despesa.");
       }
-      formDespesa.reset();
-      delete formDespesa.dataset.editingId;
-      await loadDespesas();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar despesa (verifique se o backend tem o endpoint PUT /api/despesas/{id}).");
-    }
-  });
-}
+    });
+  }
 
-
+  const formCartao = document.getElementById("form-cartao");
   if (formCartao) {
-    formCartao.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const data = new FormData(formCartao);
+    formCartao.addEventListener("submit", async (event) => {
+      event.preventDefault();
       const payload = {};
-      for (const [key, value] of data.entries()) {
+      const formData = new FormData(formCartao);
+      for (const [key, value] of formData.entries()) {
         if (value === "") continue;
         if (["closing_day", "due_day"].includes(key)) {
           payload[key] = Number(value);
@@ -943,680 +1080,101 @@ document.addEventListener("DOMContentLoaded", () => {
           payload[key] = value;
         }
       }
+      const editId = formCartao.dataset.editId;
       try {
-        await fetchJSON(API_BASE + "/api/cartoes", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        if (editId) {
+          await fetchJSON(`${API_BASE}/api/cartoes/${editId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await fetchJSON(`${API_BASE}/api/cartoes`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }
         formCartao.reset();
+        delete formCartao.dataset.editId;
         await loadCartoes();
       } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar cartão");
+        alert("Erro ao salvar cartão.");
       }
     });
   }
 
+  const formTransacao = document.getElementById("form-transacao-cartao");
   if (formTransacao) {
-    formTransacao.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const data = new FormData(formTransacao);
-      const payload = {};
-      for (const [key, value] of data.entries()) {
-        if (value === "") continue;
-        if (["credit_card_id", "installments", "installment_n"].includes(key)) {
-          payload[key] = Number(value);
-        } else if (["amount_total"].includes(key)) {
-          payload[key] = Number(value);
-        } else {
-          payload[key] = value;
-        }
-      }
-
+    formTransacao.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formTransacao);
       const total = payload.amount_total || 0;
       const parcelas = payload.installments || 1;
       payload.amount_installment = total / parcelas;
-
+      payload.due_date = payload.due_date || payload.purchase_date;
       try {
-        await fetchJSON(API_BASE + "/api/transacoes-cartao", {
+        await fetchJSON(`${API_BASE}/api/transacoes-cartao`, {
           method: "POST",
           body: JSON.stringify(payload),
         });
         formTransacao.reset();
-        await loadDespesas(); // despesas geradas automaticamente
         await loadTransacoesCartao();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar transação de cartão");
-      }
-    });
-  }
-
-  // formulários de parâmetros de receita
-  const formCatReceita = document.getElementById("form-cat-receita");
-  if (formCatReceita) {
-    formCatReceita.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formCatReceita);
-      try {
-        await fetchJSON(API_BASE + "/api/receita/categorias", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formCatReceita.reset();
-        await loadParametrosReceita();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar categoria de receita");
-      }
-    });
-  }
-
-  const formContaReceita = document.getElementById("form-conta-receita");
-  if (formContaReceita) {
-    formContaReceita.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formContaReceita);
-      try {
-        await fetchJSON(API_BASE + "/api/receita/contas", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formContaReceita.reset();
-        await loadParametrosReceita();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar conta de receita");
-      }
-    });
-  }
-
-  const formFPReceita = document.getElementById("form-fp-receita");
-  if (formFPReceita) {
-    formFPReceita.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formFPReceita);
-      try {
-        await fetchJSON(API_BASE + "/api/receita/formas-pagamento", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formFPReceita.reset();
-        await loadParametrosReceita();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar forma de pagamento de receita");
-      }
-    });
-  }
-
-  // formulários de parâmetros de despesa
-  const formCatDespesa = document.getElementById("form-cat-despesa");
-  if (formCatDespesa) {
-    formCatDespesa.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formCatDespesa);
-      try {
-        await fetchJSON(API_BASE + "/api/despesa/categorias", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formCatDespesa.reset();
-        await loadParametrosDespesa();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar categoria de despesa");
-      }
-    });
-  }
-
-  const formContaDespesa = document.getElementById("form-conta-despesa");
-  if (formContaDespesa) {
-    formContaDespesa.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formContaDespesa);
-      try {
-        await fetchJSON(API_BASE + "/api/despesa/contas", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formContaDespesa.reset();
-        await loadParametrosDespesa();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar conta de despesa");
-      }
-    });
-  }
-
-  const formFPDespesa = document.getElementById("form-fp-despesa");
-  if (formFPDespesa) {
-    formFPDespesa.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = serializeForm(formFPDespesa);
-      try {
-        await fetchJSON(API_BASE + "/api/despesa/formas-pagamento", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        formFPDespesa.reset();
-        await loadParametrosDespesa();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao salvar forma de pagamento de despesa");
-      }
-    });
-  }
-
-  // alteração da data de pagamento receita / despesa
-  document.addEventListener("change", async (e) => {
-    const target = e.target;
-
-    if (target.classList.contains("input-pagamento-receita")) {
-      const id = Number(target.dataset.id);
-      const payment_date = target.value || null;
-      try {
-        await fetchJSON(`${API_BASE}/api/receitas/${id}/pagamento`, {
-          method: "PATCH",
-          body: JSON.stringify({ payment_date }),
-        });
-        await loadReceitas();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao atualizar data de pagamento da receita");
-      }
-    }
-
-    if (target.classList.contains("input-pagamento-despesa")) {
-      const id = Number(target.dataset.id);
-      const payment_date = target.value || null;
-      try {
-        await fetchJSON(`${API_BASE}/api/despesas/${id}/pagamento`, {
-          method: "PATCH",
-          body: JSON.stringify({ payment_date }),
-        });
         await loadDespesas();
       } catch (err) {
-        console.error(err);
-        alert("Erro ao atualizar data de pagamento da despesa");
-      }
-    }
-  });
-
-  // filtro de ano (multi-select)
-  const yearSelect = document.getElementById("filter-year");
-  if (yearSelect) {
-    yearSelect.addEventListener("change", () => {
-      const selected = Array.from(yearSelect.selectedOptions)
-        .map((o) => parseInt(o.value, 10))
-        .filter((n) => !isNaN(n));
-      dashYearsSelected = selected; // [] => todos os anos
-      updateDashboard();
-    });
-  }
-
-  // filtro de meses (multi-select)
-  const monthsSelect = document.getElementById("filter-months");
-  if (monthsSelect) {
-    monthsSelect.addEventListener("change", () => {
-      const selected = Array.from(monthsSelect.selectedOptions)
-        .map((o) => parseInt(o.value, 10))
-        .filter((n) => !isNaN(n));
-      dashMonthsSelected = selected; // [] => todos os meses
-      updateDashboard();
-    });
-  }
-
-// ====================== CARTÕES: RESUMO, TABELA, GRÁFICOS ======================
-const API = "http://127.0.0.1:8000";
-
-let chartGastoCartao = null;
-let chartLimiteCartao = null;
-
-function formatCurrency(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
-
-async function carregarCartoesResumo() {
-  try {
-    const [resCartoes, resTx] = await Promise.all([
-      fetch(`${API}/api/cartoes`),
-      fetch(`${API}/api/transacoes-cartao`)
-    ]);
-
-    if (!resCartoes.ok) throw new Error("Erro ao carregar cartões");
-    if (!resTx.ok) throw new Error("Erro ao carregar transações de cartão");
-
-    const cartoes = await resCartoes.json();
-    const transacoes = await resTx.json();
-
-    renderTabelaCartoes(cartoes);
-    configurarSelecaoCartoes();
-    atualizarGraficosCartao(cartoes, transacoes);
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-function renderTabelaCartoes(cartoes) {
-  const tabela = document.getElementById("table-cartoes");
-  if (!tabela) return;
-
-  const tbody = tabela.querySelector("tbody");
-  if (!tbody) return;
-
-  tbody.innerHTML = "";
-
-  cartoes.forEach((c) => {
-    const tr = document.createElement("tr");
-    tr.dataset.id = c.id;
-
-    const iniciais = (c.name || c.cartao || "")
-      .toString()
-      .slice(0, 2)
-      .toUpperCase();
-
-    tr.innerHTML = `
-      <td><input type="checkbox" class="row-select-cartao" data-id="${c.id}" /></td>
-      <td>
-        <div class="card-logo-wrap">
-          <div class="card-logo-badge">${iniciais}</div>
-          <span>${c.name || c.cartao}</span>
-        </div>
-      </td>
-      <td>${c.closing_day ?? ""}</td>
-      <td>${c.due_day ?? ""}</td>
-      <td>${formatCurrency(c.limit_total ?? 0)}</td>
-      <td>${c.status ?? ""}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function configurarSelecaoCartoes() {
-  const chkAll = document.getElementById("chk-all-cartoes");
-  const btnEdit = document.getElementById("btn-edit-cartao");
-  const btnDelete = document.getElementById("btn-delete-cartao");
-  const tbody = document.querySelector("#table-cartoes tbody");
-
-  if (!chkAll || !btnEdit || !btnDelete || !tbody) return;
-
-  function getSelecionados() {
-    return Array.from(
-      document.querySelectorAll(".row-select-cartao:checked")
-    ).map((el) => el.dataset.id);
-  }
-
-  function atualizarBotoes() {
-    const selecionados = getSelecionados();
-    btnDelete.disabled = selecionados.length === 0;
-    btnEdit.disabled = selecionados.length !== 1;
-  }
-
-  chkAll.addEventListener("change", () => {
-    const checks = document.querySelectorAll(".row-select-cartao");
-    checks.forEach((c) => (c.checked = chkAll.checked));
-    atualizarBotoes();
-  });
-
-  tbody.addEventListener("change", (e) => {
-    if (e.target.classList.contains("row-select-cartao")) {
-      atualizarBotoes();
-      if (!e.target.checked) chkAll.checked = false;
-    }
-  });
-
-  btnDelete.addEventListener("click", async () => {
-    const ids = getSelecionados();
-    if (!ids.length) return;
-    if (!confirm(`Confirma excluir ${ids.length} cartão(ões)?`)) return;
-
-    try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`${API}/api/cartoes/${id}`, { method: "DELETE" })
-        )
-      );
-      await carregarCartoesResumo();
-    } catch (err) {
-      alert(
-        "Erro ao excluir cartões. Verifique se o backend tem DELETE /api/cartoes/{id}."
-      );
-      console.error(err);
-    }
-  });
-
-  btnEdit.addEventListener("click", async () => {
-    const ids = getSelecionados();
-    if (ids.length !== 1) return;
-
-    const id = ids[0];
-
-    try {
-      const res = await fetch(`${API}/api/cartoes`);
-      if (!res.ok) throw new Error();
-      const cartoes = await res.json();
-      const cartao = cartoes.find((c) => String(c.id) === String(id));
-      if (!cartao) return;
-
-      const form = document.getElementById("form-cartao");
-      if (!form) return;
-
-      form.dataset.editId = id;
-      form.name.value = cartao.name || cartao.cartao || "";
-      form.closing_day.value = cartao.closing_day ?? "";
-      form.due_day.value = cartao.due_day ?? "";
-      form.limit_total.value = cartao.limit_total ?? "";
-      form.annual_fee.value = cartao.annual_fee ?? "";
-      form.status.value = cartao.status ?? "ativo";
-
-      form.scrollIntoView({ behavior: "smooth" });
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
-  atualizarBotoes();
-}
-
-function atualizarGraficosCartao(cartoes, transacoes) {
-  const ctxGasto = document.getElementById("chart-gasto-cartao");
-  const ctxLimite = document.getElementById("chart-limite-cartao");
-  if (!ctxGasto || !ctxLimite) return;
-
-  const gastosPorCartao = {};
-  cartoes.forEach((c) => (gastosPorCartao[c.id] = 0));
-
-  transacoes.forEach((t) => {
-    const cardId = t.credit_card_id || t.cartao_id || t.card_id;
-    if (cardId && gastosPorCartao.hasOwnProperty(cardId)) {
-      const valor = Number(
-        t.amount_installment ?? t.amount_total ?? t.amount ?? 0
-      );
-      gastosPorCartao[cardId] += valor;
-    }
-  });
-
-  const labels = cartoes.map((c) => c.name || c.cartao);
-  const gastos = cartoes.map((c) => gastosPorCartao[c.id] || 0);
-  const limites = cartoes.map((c) => Number(c.limit_total ?? 0));
-  const disponiveis = limites.map((lim, i) => Math.max(lim - gastos[i], 0));
-
-  if (chartGastoCartao) chartGastoCartao.destroy();
-  if (chartLimiteCartao) chartLimiteCartao.destroy();
-
-  chartGastoCartao = new Chart(ctxGasto, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Gasto", data: gastos }],
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } },
-    },
-  });
-
-  chartLimiteCartao = new Chart(ctxLimite, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Limite disponível", data: disponiveis }],
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } },
-    },
-  });
-}
-
-// garante que isso rode quando a tela carregar
-window.addEventListener("load", () => {
-  carregarCartoesResumo();
-});
-
-// ====================== MULTISELECT SEM CTRL (ANO/MÊS DASHBOARD) ======================
-function enableMultiSelectWithoutCtrl(select) {
-  if (!select) return;
-
-  select.addEventListener("mousedown", function (e) {
-    const option = e.target;
-    if (option.tagName !== "OPTION") return;
-
-    e.preventDefault(); // não deixa o browser trocar seleção sozinho
-    option.selected = !option.selected; // alterna manualmente
-    select.dispatchEvent(new Event("change")); // dispara para sua lógica atual ouvir
-  });
-}
-
-window.addEventListener("load", () => {
-  enableMultiSelectWithoutCtrl(document.getElementById("filter-year"));
-  enableMultiSelectWithoutCtrl(document.getElementById("filter-months"));
-});
-
-  // carregar dados iniciais
-  (async () => {
-    await loadReceitas();
-    await loadDespesas();
-    await loadCartoes();
-    await loadTransacoesCartao();
-    await loadParametrosReceita();
-    await loadParametrosDespesa();
-  })();
-});
-
-// ====================== CARTÕES: TABELA + SELEÇÃO + AÇÕES ======================
-const API = "http://127.0.0.1:8000";
-
-let chartGastoCartao = null;
-let chartLimiteCartao = null;
-
-async function carregarCartoesResumo() {
-  try {
-    const [resCartoes, resTx] = await Promise.all([
-      fetch(`${API}/api/cartoes`),
-      fetch(`${API}/api/transacoes-cartao`)
-    ]);
-
-    if (!resCartoes.ok) throw new Error("Erro ao carregar cartões");
-    if (!resTx.ok) throw new Error("Erro ao carregar transações de cartão");
-
-    const cartoes = await resCartoes.json();
-    const transacoes = await resTx.json();
-
-    renderTabelaCartoes(cartoes);
-    popularSelectCartaoTransacao(cartoes);
-    configurarSelecaoCartoes();
-    atualizarGraficosCartao(cartoes, transacoes);
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-function renderTabelaCartoes(cartoes) {
-  const tbody = document.querySelector("#table-cartoes tbody");
-  if (!tbody) return;
-
-  tbody.innerHTML = "";
-
-  cartoes.forEach((c) => {
-    const tr = document.createElement("tr");
-    const iniciais = (c.name || c.cartao || "").toString().slice(0, 2).toUpperCase();
-
-    tr.innerHTML = `
-      <td><input type="checkbox" class="row-select-cartao" data-id="${c.id}" /></td>
-      <td>
-        <div class="card-logo-wrap">
-          <div class="card-logo-badge">${iniciais}</div>
-          <span>${c.name || c.cartao}</span>
-        </div>
-      </td>
-      <td>${c.closing_day ?? ""}</td>
-      <td>${c.due_day ?? ""}</td>
-      <td>${formatCurrency(c.limit_total ?? 0)}</td>
-      <td>${c.status ?? ""}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function popularSelectCartaoTransacao(cartoes) {
-  const select = document.getElementById("select-cartao-transacao");
-  if (!select) return;
-
-  const current = select.value;
-  select.innerHTML = `<option value="">Selecione um cartão</option>`;
-
-  cartoes.forEach((c) => {
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.name || c.cartao;
-    select.appendChild(opt);
-  });
-
-  if (current) select.value = current;
-}
-
-function configurarSelecaoCartoes() {
-  const chkAll = document.getElementById("chk-all-cartoes");
-  const btnEdit = document.getElementById("btn-edit-cartao");
-  const btnDelete = document.getElementById("btn-delete-cartao");
-
-  if (!chkAll || !btnEdit || !btnDelete) return;
-
-  function getSelecionados() {
-    return Array.from(
-      document.querySelectorAll(".row-select-cartao:checked")
-    ).map((el) => el.dataset.id);
-  }
-
-  function atualizarBotoes() {
-    const selecionados = getSelecionados();
-    btnDelete.disabled = selecionados.length === 0;
-    btnEdit.disabled = selecionados.length !== 1; // só permite editar 1 por vez
-  }
-
-  chkAll.addEventListener("change", () => {
-    const checks = document.querySelectorAll(".row-select-cartao");
-    checks.forEach((c) => (c.checked = chkAll.checked));
-    atualizarBotoes();
-  });
-
-  document
-    .querySelector("#table-cartoes tbody")
-    .addEventListener("change", (e) => {
-      if (e.target.classList.contains("row-select-cartao")) {
-        atualizarBotoes();
-        if (!e.target.checked) chkAll.checked = false;
+        alert("Erro ao salvar transação de cartão.");
       }
     });
+  }
 
-  btnDelete.addEventListener("click", async () => {
-    const ids = getSelecionados();
-    if (!ids.length) return;
+  const simpleParamForms = [
+    { id: "form-cat-receita", url: "/api/receita/categorias", reload: loadParametrosReceita },
+    { id: "form-conta-receita", url: "/api/receita/contas", reload: loadParametrosReceita },
+    { id: "form-fp-receita", url: "/api/receita/formas-pagamento", reload: loadParametrosReceita },
+    { id: "form-cat-despesa", url: "/api/despesa/categorias", reload: loadParametrosDespesa },
+    { id: "form-conta-despesa", url: "/api/despesa/contas", reload: loadParametrosDespesa },
+    { id: "form-fp-despesa", url: "/api/despesa/formas-pagamento", reload: loadParametrosDespesa },
+  ];
 
-    if (!confirm(`Confirma excluir ${ids.length} cartão(ões)?`)) return;
-
-    try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`${API}/api/cartoes/${id}`, {
-            method: "DELETE",
-          })
-        )
-      );
-      await carregarCartoesResumo();
-    } catch (err) {
-      alert("Erro ao excluir cartões. Verifique se o backend tem DELETE /api/cartoes/{id}.");
-      console.error(err);
-    }
-  });
-
-  btnEdit.addEventListener("click", async () => {
-    const ids = getSelecionados();
-    if (ids.length !== 1) return;
-
-    const id = ids[0];
-
-    // Para edição simples: preenche o formulário de cartão com os dados atuais
-    try {
-      const res = await fetch(`${API}/api/cartoes`);
-      if (!res.ok) throw new Error();
-      const cartoes = await res.json();
-      const cartao = cartoes.find((c) => String(c.id) === String(id));
-      if (!cartao) return;
-
-      const form = document.getElementById("form-cartao");
-      if (!form) return;
-
-      form.dataset.editId = id; // flag para sabermos que é edição
-      form.name.value = cartao.name || cartao.cartao || "";
-      form.closing_day.value = cartao.closing_day ?? "";
-      form.due_day.value = cartao.due_day ?? "";
-      form.limit_total.value = cartao.limit_total ?? "";
-      form.annual_fee.value = cartao.annual_fee ?? "";
-      form.status.value = cartao.status ?? "ativo";
-
-      form.scrollIntoView({ behavior: "smooth" });
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
-  atualizarBotoes();
-}
-
-// intercepta submit do form-cartao para tratar edição x criação
-(function interceptFormCartao() {
-  const form = document.getElementById("form-cartao");
-  if (!form) return;
-
-  form.addEventListener("submit", async (e) => {
-    // só intercepta se estiver em modo edição
-    if (!form.dataset.editId) return;
-
-    e.preventDefault();
-
-    const payload = {
-      name: form.name.value,
-      closing_day: Number(form.closing_day.value || 0),
-      due_day: Number(form.due_day.value || 0),
-      limit_total: Number(form.limit_total.value || 0),
-      annual_fee: Number(form.annual_fee.value || 0),
-      status: form.status.value,
-    };
-
-    try {
-      const res = await fetch(`${API}/api/cartoes/${form.dataset.editId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error();
-      form.reset();
-      delete form.dataset.editId;
-      await carregarCartoesResumo();
-      alert("Cartão atualizado com sucesso!");
-    } catch (err) {
-      alert("Erro ao atualizar cartão. Verifique se o backend tem PUT /api/cartoes/{id}.");
-      console.error(err);
-    }
-  });
-})();
-
-// helper simples para moeda
-function formatCurrency(value) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
+  simpleParamForms.forEach(({ id, url, reload }) => {
+    const form = document.getElementById(id);
+    if (!form) return;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(form);
+      try {
+        await fetchJSON(`${API_BASE}${url}`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        form.reset();
+        await reload();
+      } catch (err) {
+        alert("Erro ao salvar parâmetro.");
+      }
+    });
   });
 }
 
-// chama isso quando a página carregar
-window.addEventListener("load", () => {
-  carregarCartoesResumo();
-});
+function updateActionButtons() {
+  const btnEditReceita = document.getElementById("btn-edit-receita");
+  const btnDelReceita = document.getElementById("btn-delete-receita");
+  const btnEditDespesa = document.getElementById("btn-edit-despesa");
+  const btnDelDespesa = document.getElementById("btn-delete-despesa");
+  const btnDelTrans = document.getElementById("btn-delete-transacao-cartao");
+  const btnEditCartao = document.getElementById("btn-edit-cartao");
+  const btnDelCartao = document.getElementById("btn-delete-cartao");
+
+  const selReceitas = getSelectedIdsFromTable("table-receitas");
+  const selDespesas = getSelectedIdsFromTable("table-despesas");
+  const selCartoes = getSelectedIdsFromTable("table-cartoes");
+  const selTrans = getSelectedIdsFromTable("table-transacoes-cartao");
+
+  if (btnEditReceita) btnEditReceita.disabled = selReceitas.length !== 1;
+  if (btnDelReceita) btnDelReceita.disabled = selReceitas.length === 0;
+  if (btnEditDespesa) btnEditDespesa.disabled = selDespesas.length !== 1;
+  if (btnDelDespesa) btnDelDespesa.disabled = selDespesas.length === 0;
+  if (btnEditCartao) btnEditCartao.disabled = selCartoes.length !== 1;
+  if (btnDelCartao) btnDelCartao.disabled = selCartoes.length === 0;
+  if (btnDelTrans) btnDelTrans.disabled = selTrans.length === 0;
+  highlightSelectedRows();
+}
 
