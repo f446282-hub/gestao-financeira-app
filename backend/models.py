@@ -3,7 +3,8 @@ from datetime import date
 from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
-from backend.database import Base
+from .database import Base
+
 
 
 class Revenue(Base):

@@ -6,8 +6,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from backend import crud, schemas, models
-from backend.database import Base, engine, get_db
+# IMPORTS INTERNOS – use relativo (.)
+from . import crud, schemas, models
+from .database import Base, engine, get_db
 
 
 # Cria as tabelas no start (ok para app pequeno / dev)

@@ -6,7 +6,9 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from backend import models, schemas
+# IMPORTS INTERNOS – relativo
+from . import models, schemas
+
 
 
 # ---------- helpers ----------
