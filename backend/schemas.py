@@ -1,9 +1,11 @@
-from pydantic import BaseModel
 from datetime import date
-from typing import Optional
+from typing import Optional, List
+
+from pydantic import BaseModel
 
 
 # ---------- RECEITAS ----------
+
 
 class RevenueBase(BaseModel):
     description: str
@@ -14,26 +16,31 @@ class RevenueBase(BaseModel):
     amount_total: float
     installments: int = 1
     installment_n: int = 1
-    payment_method: Optional[str] = None
-    notes: Optional[str] = None
+    amount_installment: float
+
+    class Config:
+        orm_mode = True
 
 
-class RevenueCreate(RevenueBase):
-    pass
+class RevenueCreate(BaseModel):
+    description: str
+    category: Optional[str] = None
+    account: Optional[str] = None
+    due_date: date
+    payment_date: Optional[date] = None
+    amount_total: float
+    installments: int = 1
+
+    class Config:
+        orm_mode = True
 
 
 class RevenueOut(RevenueBase):
     id: int
 
-    class Config:
-        from_attributes = True
-
-
-class RevenuePaymentUpdate(BaseModel):
-    payment_date: Optional[date] = None
-
 
 # ---------- DESPESAS ----------
+
 
 class ExpenseBase(BaseModel):
     description: str
@@ -44,34 +51,41 @@ class ExpenseBase(BaseModel):
     amount_total: float
     installments: int = 1
     installment_n: int = 1
-    payment_method: Optional[str] = None
-    notes: Optional[str] = None
+    amount_installment: float
+
+    class Config:
+        orm_mode = True
 
 
-class ExpenseCreate(ExpenseBase):
-    pass
+class ExpenseCreate(BaseModel):
+    description: str
+    category: Optional[str] = None
+    account: Optional[str] = None
+    due_date: date
+    payment_date: Optional[date] = None
+    amount_total: float
+    installments: int = 1
+
+    class Config:
+        orm_mode = True
 
 
 class ExpenseOut(ExpenseBase):
     id: int
 
-    class Config:
-        from_attributes = True
 
+# ---------- CARTÕES ----------
 
-class ExpensePaymentUpdate(BaseModel):
-    payment_date: Optional[date] = None
-
-
-# ---------- CARTÕES DE CRÉDITO ----------
 
 class CreditCardBase(BaseModel):
     name: str
     closing_day: int
     due_day: int
-    limit_total: Optional[float] = None
-    annual_fee: Optional[float] = None
-    status: str = "ativo"
+    limit_total: float
+    is_active: bool = True
+
+    class Config:
+        orm_mode = True
 
 
 class CreditCardCreate(CreditCardBase):
@@ -81,12 +95,12 @@ class CreditCardCreate(CreditCardBase):
 class CreditCardOut(CreditCardBase):
     id: int
 
-    class Config:
-        from_attributes = True
+
+# ---------- TRANSAÇÕES DE CARTÃO ----------
 
 
 class CreditCardTransactionBase(BaseModel):
-    credit_card_id: int
+    card_id: int
     description: str
     category: Optional[str] = None
     purchase_date: date
@@ -96,107 +110,37 @@ class CreditCardTransactionBase(BaseModel):
     installment_n: int = 1
     amount_installment: float
 
+    class Config:
+        orm_mode = True
 
-class CreditCardTransactionCreate(CreditCardTransactionBase):
-    pass
+
+class CreditCardTransactionCreate(BaseModel):
+    card_id: int
+    description: str
+    category: Optional[str] = None
+    purchase_date: date
+    due_date: date
+    amount_total: float
+    installments: int = 1
+
+    class Config:
+        orm_mode = True
 
 
 class CreditCardTransactionOut(CreditCardTransactionBase):
     id: int
 
-    class Config:
-        from_attributes = True
+
+# ---------- PARÂMETROS SIMPLES (se quiser usar depois) ----------
 
 
-# ---------- PARÂMETROS DE RECEITA ----------
-
-class RevenueCategoryBase(BaseModel):
+class SimpleNamedItem(BaseModel):
+    id: int
     name: str
 
-
-class RevenueCategoryCreate(RevenueCategoryBase):
-    pass
-
-
-class RevenueCategoryOut(RevenueCategoryBase):
-    id: int
-
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-class RevenueAccountBase(BaseModel):
+class SimpleNamedItemCreate(BaseModel):
     name: str
-
-
-class RevenueAccountCreate(RevenueAccountBase):
-    pass
-
-
-class RevenueAccountOut(RevenueAccountBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class RevenuePaymentMethodBase(BaseModel):
-    name: str
-
-
-class RevenuePaymentMethodCreate(RevenuePaymentMethodBase):
-    pass
-
-
-class RevenuePaymentMethodOut(RevenuePaymentMethodBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-# ---------- PARÂMETROS DE DESPESA ----------
-
-class ExpenseCategoryBase(BaseModel):
-    name: str
-
-
-class ExpenseCategoryCreate(ExpenseCategoryBase):
-    pass
-
-
-class ExpenseCategoryOut(ExpenseCategoryBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class ExpenseAccountBase(BaseModel):
-    name: str
-
-
-class ExpenseAccountCreate(ExpenseAccountBase):
-    pass
-
-
-class ExpenseAccountOut(ExpenseAccountBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class ExpensePaymentMethodBase(BaseModel):
-    name: str
-
-
-class ExpensePaymentMethodCreate(ExpensePaymentMethodBase):
-    pass
-
-
-class ExpensePaymentMethodOut(ExpensePaymentMethodBase):
-    id: int
-
-    class Config:
-        from_attributes = True
