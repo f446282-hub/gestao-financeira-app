@@ -1,10 +1,9 @@
+# backend/models.py
 from datetime import date
-
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, Date, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 
 from .database import Base
-
 
 
 class Revenue(Base):
@@ -13,13 +12,13 @@ class Revenue(Base):
     id = Column(Integer, primary_key=True, index=True)
     description = Column(String, nullable=False)
     category = Column(String, nullable=True)
-    account = Column(String, nullable=True)
     due_date = Column(Date, nullable=False)
     payment_date = Column(Date, nullable=True)
     amount_total = Column(Float, nullable=False)
-    installments = Column(Integer, nullable=False, default=1)
-    installment_n = Column(Integer, nullable=False, default=1)
+    installments = Column(Integer, default=1)
+    installment_n = Column(Integer, default=1)
     amount_installment = Column(Float, nullable=False)
+    paid = Column(Boolean, default=False)
 
 
 class Expense(Base):
@@ -28,28 +27,28 @@ class Expense(Base):
     id = Column(Integer, primary_key=True, index=True)
     description = Column(String, nullable=False)
     category = Column(String, nullable=True)
-    account = Column(String, nullable=True)
     due_date = Column(Date, nullable=False)
     payment_date = Column(Date, nullable=True)
     amount_total = Column(Float, nullable=False)
-    installments = Column(Integer, nullable=False, default=1)
-    installment_n = Column(Integer, nullable=False, default=1)
+    installments = Column(Integer, default=1)
+    installment_n = Column(Integer, default=1)
     amount_installment = Column(Float, nullable=False)
+    paid = Column(Boolean, default=False)
 
 
 class CreditCard(Base):
     __tablename__ = "credit_cards"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    closing_day = Column(Integer, nullable=False)
-    due_day = Column(Integer, nullable=False)
-    limit_total = Column(Float, nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True)
+    name = Column(String, nullable=False)           # Ex.: "Nubank"
+    last_digits = Column(String, nullable=True)     # Ex.: "1234"
+    closing_day = Column(Integer, nullable=False)   # dia de fechamento
+    due_day = Column(Integer, nullable=False)       # dia de vencimento
+    limit_value = Column(Float, nullable=False)
+    status = Column(String, default="ativo")        # "ativo" / "inativo"
+    logo_url = Column(String, nullable=True)
 
-    transactions = relationship(
-        "CreditCardTransaction", back_populates="card", cascade="all, delete-orphan"
-    )
+    transactions = relationship("CreditCardTransaction", back_populates="card")
 
 
 class CreditCardTransaction(Base):
@@ -57,13 +56,18 @@ class CreditCardTransaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     card_id = Column(Integer, ForeignKey("credit_cards.id"), nullable=False)
+
     description = Column(String, nullable=False)
     category = Column(String, nullable=True)
+
     purchase_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
+
     amount_total = Column(Float, nullable=False)
-    installments = Column(Integer, nullable=False, default=1)
-    installment_n = Column(Integer, nullable=False, default=1)
+    installments = Column(Integer, default=1)
+    installment_n = Column(Integer, default=1)
     amount_installment = Column(Float, nullable=False)
+
+    paid = Column(Boolean, default=False)
 
     card = relationship("CreditCard", back_populates="transactions")

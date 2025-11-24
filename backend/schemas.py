@@ -1,103 +1,96 @@
+# backend/schemas.py
 from datetime import date
-from typing import Optional, List
+from typing import Optional
 
 from pydantic import BaseModel
 
 
-# ---------- RECEITAS ----------
-
+# ---------- REVENUE ----------
 
 class RevenueBase(BaseModel):
     description: str
     category: Optional[str] = None
-    account: Optional[str] = None
     due_date: date
     payment_date: Optional[date] = None
     amount_total: float
     installments: int = 1
     installment_n: int = 1
     amount_installment: float
-
-    class Config:
-        orm_mode = True
+    paid: bool = False
 
 
-class RevenueCreate(BaseModel):
-    description: str
-    category: Optional[str] = None
-    account: Optional[str] = None
-    due_date: date
-    payment_date: Optional[date] = None
-    amount_total: float
-    installments: int = 1
+class RevenueCreate(RevenueBase):
+    pass
 
-    class Config:
-        orm_mode = True
+
+class RevenueUpdate(RevenueBase):
+    pass
 
 
 class RevenueOut(RevenueBase):
     id: int
 
+    class Config:
+        orm_mode = True
 
-# ---------- DESPESAS ----------
 
+# ---------- EXPENSE ----------
 
 class ExpenseBase(BaseModel):
     description: str
     category: Optional[str] = None
-    account: Optional[str] = None
     due_date: date
     payment_date: Optional[date] = None
     amount_total: float
     installments: int = 1
     installment_n: int = 1
     amount_installment: float
-
-    class Config:
-        orm_mode = True
+    paid: bool = False
 
 
-class ExpenseCreate(BaseModel):
-    description: str
-    category: Optional[str] = None
-    account: Optional[str] = None
-    due_date: date
-    payment_date: Optional[date] = None
-    amount_total: float
-    installments: int = 1
+class ExpenseCreate(ExpenseBase):
+    pass
 
-    class Config:
-        orm_mode = True
+
+class ExpenseUpdate(ExpenseBase):
+    pass
 
 
 class ExpenseOut(ExpenseBase):
     id: int
 
+    class Config:
+        orm_mode = True
 
-# ---------- CARTÕES ----------
 
+# ---------- CREDIT CARD ----------
 
 class CreditCardBase(BaseModel):
     name: str
+    last_digits: Optional[str] = None
     closing_day: int
     due_day: int
-    limit_total: float
-    is_active: bool = True
-
-    class Config:
-        orm_mode = True
+    limit_value: float
+    status: str = "ativo"
+    logo_url: Optional[str] = None
 
 
 class CreditCardCreate(CreditCardBase):
     pass
 
 
+class CreditCardUpdate(CreditCardBase):
+    pass
+
+
 class CreditCardOut(CreditCardBase):
     id: int
 
+    class Config:
+        orm_mode = True
 
-# ---------- TRANSAÇÕES DE CARTÃO ----------
 
+# ---------- CREDIT CARD TRANSACTION ----------
 
 class CreditCardTransactionBase(BaseModel):
     card_id: int
@@ -109,38 +102,19 @@ class CreditCardTransactionBase(BaseModel):
     installments: int = 1
     installment_n: int = 1
     amount_installment: float
-
-    class Config:
-        orm_mode = True
+    paid: bool = False
 
 
-class CreditCardTransactionCreate(BaseModel):
-    card_id: int
-    description: str
-    category: Optional[str] = None
-    purchase_date: date
-    due_date: date
-    amount_total: float
-    installments: int = 1
+class CreditCardTransactionCreate(CreditCardTransactionBase):
+    pass
 
-    class Config:
-        orm_mode = True
+
+class CreditCardTransactionUpdate(CreditCardTransactionBase):
+    pass
 
 
 class CreditCardTransactionOut(CreditCardTransactionBase):
     id: int
 
-
-# ---------- PARÂMETROS SIMPLES (se quiser usar depois) ----------
-
-
-class SimpleNamedItem(BaseModel):
-    id: int
-    name: str
-
     class Config:
         orm_mode = True
-
-
-class SimpleNamedItemCreate(BaseModel):
-    name: str
