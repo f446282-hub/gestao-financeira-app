@@ -6,6 +6,10 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
+from backend import models, schemas, crud, database
+from backend.database import get_db
+
+
 # IMPORTS INTERNOS – use relativo (.)
 from . import crud, schemas, models
 from .database import Base, engine, get_db
