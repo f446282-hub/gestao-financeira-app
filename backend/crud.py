@@ -75,7 +75,7 @@ def update_expense(db: Session, expense_id: int, data: schemas.ExpenseUpdate) ->
 
 def delete_expense(db: Session, expense_id: int) -> bool:
     expense = get_expense(db, expense_id)
-    if not hero:
+    if not expense:
         return False
     db.delete(expense)
     db.commit()
