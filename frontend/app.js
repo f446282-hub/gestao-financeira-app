@@ -14,18 +14,10 @@ let dashYearsSelected = [];
 let dashMonthsSelected = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const MONTH_OPTIONS = [
-  { value: 1, label: "Jan" },
-  { value: 2, label: "Fev" },
-  { value: 3, label: "Mar" },
-  { value: 4, label: "Abr" },
-  { value: 5, label: "Mai" },
-  { value: 6, label: "Jun" },
-  { value: 7, label: "Jul" },
-  { value: 8, label: "Ago" },
-  { value: 9, label: "Set" },
-  { value: 10, label: "Out" },
-  { value: 11, label: "Nov" },
-  { value: 12, label: "Dez" },
+  { value: 1, label: "Jan" }, { value: 2, label: "Fev" }, { value: 3, label: "Mar" },
+  { value: 4, label: "Abr" }, { value: 5, label: "Mai" }, { value: 6, label: "Jun" },
+  { value: 7, label: "Jul" }, { value: 8, label: "Ago" }, { value: 9, label: "Set" },
+  { value: 10, label: "Out" }, { value: 11, label: "Nov" }, { value: 12, label: "Dez" }
 ];
 
 let chartRD = null;
@@ -43,7 +35,7 @@ async function init() {
   setupButtonActions();
   setupForms();
   renderMonthFilterOptions();
-
+  
   await loadReceitas();
   await loadDespesas();
   await loadCartoes();
@@ -56,15 +48,11 @@ async function fetchJSON(url, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-
   if (!res.ok) {
     let detail = "";
-    try {
-      detail = await res.text();
-    } catch (_) {}
+    try { detail = await res.text(); } catch (_) {}
     throw new Error(`Erro na API: ${res.status} ${detail}`);
   }
-
   if (res.status === 204) return null;
   return await res.json();
 }
@@ -80,20 +68,14 @@ function serializeForm(form) {
       obj[key] = value;
     }
   }
-  
-  // Calcula amount_installment automaticamente
   if (obj.amount_total && obj.installments) {
     obj.amount_installment = obj.amount_total / obj.installments;
   }
-  
   return obj;
 }
 
 function formatCurrency(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function applyFilters(list, filters, mapper = null) {
@@ -102,30 +84,24 @@ function applyFilters(list, filters, mapper = null) {
     const current = mapper ? mapper(item) : item;
     for (const [key, rawValue] of Object.entries(filters)) {
       if (rawValue === undefined || rawValue === null || rawValue === "") continue;
-
       if (key.endsWith("_from")) {
         const field = key.slice(0, -5);
-        const value = String(rawValue);
         const candidate = current[field];
-        if (!candidate || String(candidate) < value) return false;
+        if (!candidate || String(candidate) < String(rawValue)) return false;
         continue;
       }
-
       if (key.endsWith("_to")) {
         const field = key.slice(0, -3);
-        const value = String(rawValue);
         const candidate = current[field];
-        if (!candidate || String(candidate) > value) return false;
+        if (!candidate || String(candidate) > String(rawValue)) return false;
         continue;
       }
-
       if (key.endsWith("_min")) {
         const field = key.slice(0, -4);
         const min = Number(rawValue);
         if (!Number.isNaN(min) && Number(current[field] || 0) < min) return false;
         continue;
       }
-
       const target = String(current[key] || "").toLowerCase();
       if (!target.includes(String(rawValue).toLowerCase())) return false;
     }
@@ -134,9 +110,8 @@ function applyFilters(list, filters, mapper = null) {
 }
 
 function getSelectedIdsFromTable(tableId) {
-  return Array.from(
-    document.querySelectorAll(`#${tableId} tbody .row-select:checked`)
-  ).map((cb) => Number(cb.dataset.id));
+  return Array.from(document.querySelectorAll(`#${tableId} tbody .row-select:checked`))
+    .map((cb) => Number(cb.dataset.id));
 }
 
 function highlightSelectedRows() {
@@ -154,12 +129,10 @@ function renderTablePlaceholder(tbody, message) {
 }
 
 function getFiltersStore(tableKey) {
-  switch (tableKey) {
-    case "receitas": return receitaFilters;
-    case "despesas": return despesaFilters;
-    case "transacoes-cartao": return transacaoCartaoFilters;
-    default: return null;
-  }
+  if (tableKey === "receitas") return receitaFilters;
+  if (tableKey === "despesas") return despesaFilters;
+  if (tableKey === "transacoes-cartao") return transacaoCartaoFilters;
+  return null;
 }
 
 function rerenderTable(tableKey) {
@@ -177,12 +150,10 @@ function clearFilters(tableKey) {
   const store = getFiltersStore(tableKey);
   if (!store) return;
   Object.keys(store).forEach((key) => delete store[key]);
-  document
-    .querySelectorAll(`.filter-input[data-table="${tableKey}"]`)
-    .forEach((input) => {
-      input.value = "";
-      updateFilterInputVisual(input);
-    });
+  document.querySelectorAll(`.filter-input[data-table="${tableKey}"]`).forEach((input) => {
+    input.value = "";
+    updateFilterInputVisual(input);
+  });
   rerenderTable(tableKey);
 }
 
@@ -195,28 +166,15 @@ function requireSingleSelection(ids, entity) {
   return true;
 }
 
-function setupBulkDeleteButton({
-  buttonId,
-  tableId,
-  entityLabel,
-  apiPathBuilder,
-  reloadFns,
-  successMessage,
-}) {
+function setupBulkDeleteButton({ buttonId, tableId, entityLabel, apiPathBuilder, reloadFns, successMessage }) {
   const button = document.getElementById(buttonId);
   if (!button) return;
-
   button.addEventListener("click", async () => {
     const ids = getSelectedIdsFromTable(tableId);
     if (!ids.length) return;
-    const confirmMessage = `Tem certeza que deseja excluir ${ids.length} ${entityLabel}(s)?`;
-    if (!confirm(confirmMessage)) return;
+    if (!confirm(`Tem certeza que deseja excluir ${ids.length} ${entityLabel}(s)?`)) return;
     try {
-      await Promise.all(
-        ids.map((id) =>
-          fetchJSON(apiPathBuilder(id), { method: "DELETE" })
-        )
-      );
+      await Promise.all(ids.map((id) => fetchJSON(apiPathBuilder(id), { method: "DELETE" })));
       for (const fn of reloadFns) await fn();
       alert(successMessage.replace("{n}", ids.length));
     } catch (err) {
@@ -228,52 +186,39 @@ function setupBulkDeleteButton({
 
 // Dashboard
 function filterByYearAndMonths(list, years, months) {
-  const useYears = years.length > 0;
-  const useMonths = months.length > 0;
   return list.filter((item) => {
-    if (!item.due_date) return false;
-    if (!useYears || !useMonths) return false;
+    if (!item.due_date || !years.length || !months.length) return false;
     const year = parseInt(item.due_date.slice(0, 4), 10);
     const month = parseInt(item.due_date.slice(5, 7), 10);
-    if (useYears && !years.includes(year)) return false;
-    if (useMonths && !months.includes(month)) return false;
-    return true;
+    return years.includes(year) && months.includes(month);
   });
 }
 
 function buildYearFilterOptions() {
   const container = document.getElementById("filter-year-group");
   if (!container) return;
-
   const yearsSet = new Set();
   [...receitasCache, ...despesasCache].forEach((item) => {
     if (item.due_date) yearsSet.add(item.due_date.slice(0, 4));
   });
-
   if (!yearsSet.size) yearsSet.add(String(new Date().getFullYear()));
-
   const years = Array.from(yearsSet).map(Number).sort((a, b) => a - b);
   dashYearsSelected = dashYearsSelected.filter((year) => years.includes(year));
-
   if (!dashYearsSelected.length && years.length) {
     const currentYear = new Date().getFullYear();
     dashYearsSelected = years.includes(currentYear) ? [currentYear] : [years.at(-1)];
   }
-
   container.innerHTML = "";
   years.forEach((year) => {
     const label = document.createElement("label");
     label.className = "filter-pill";
-
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "filter-checkbox-year";
     input.value = String(year);
     input.checked = dashYearsSelected.includes(year);
-
     const span = document.createElement("span");
     span.textContent = year;
-
     label.appendChild(input);
     label.appendChild(span);
     container.appendChild(label);
@@ -284,20 +229,16 @@ function renderMonthFilterOptions() {
   const container = document.getElementById("filter-months-group");
   if (!container) return;
   container.innerHTML = "";
-
   MONTH_OPTIONS.forEach(({ value, label }) => {
     const pill = document.createElement("label");
     pill.className = "filter-pill";
-
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "filter-checkbox-month";
     input.value = String(value);
     input.checked = dashMonthsSelected.includes(value);
-
     const span = document.createElement("span");
     span.textContent = label;
-
     pill.appendChild(input);
     pill.appendChild(span);
     container.appendChild(pill);
@@ -305,37 +246,28 @@ function renderMonthFilterOptions() {
 }
 
 function getYearChartData(years) {
-  const labelsBase = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const labelsBase = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
   const receitas = new Array(12).fill(0);
   const despesas = new Array(12).fill(0);
-  const restrict = years.length > 0;
-
   receitasCache.forEach((r) => {
     if (!r.due_date) return;
     const year = parseInt(r.due_date.slice(0, 4), 10);
-    if (restrict && !years.includes(year)) return;
+    if (years.length && !years.includes(year)) return;
     const idx = parseInt(r.due_date.slice(5, 7), 10) - 1;
     if (idx >= 0) receitas[idx] += Number(r.amount_total || 0);
   });
-
   despesasCache.forEach((d) => {
     if (!d.due_date) return;
     const year = parseInt(d.due_date.slice(0, 4), 10);
-    if (restrict && !years.includes(year)) return;
+    if (years.length && !years.includes(year)) return;
     const idx = parseInt(d.due_date.slice(5, 7), 10) - 1;
     if (idx >= 0) despesas[idx] += Number(d.amount_total || 0);
   });
-
-  const months =
-    dashMonthsSelected.length > 0
-      ? [...dashMonthsSelected].sort((a, b) => a - b)
-      : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
-  const labels = months.map((m) => labelsBase[m - 1]);
+  const months = dashMonthsSelected.length ? [...dashMonthsSelected].sort((a,b)=>a-b) : [1,2,3,4,5,6,7,8,9,10,11,12];
   return {
-    labels,
+    labels: months.map((m) => labelsBase[m - 1]),
     receitas: months.map((m) => receitas[m - 1]),
-    despesas: months.map((m) => despesas[m - 1]),
+    despesas: months.map((m) => despesas[m - 1])
   };
 }
 
@@ -343,10 +275,8 @@ function updateDashboardChart() {
   if (typeof Chart === "undefined") return;
   const canvas = document.getElementById("chart-receitas-despesas");
   if (!canvas) return;
-
   const ctx = canvas.getContext("2d");
   const { labels, receitas, despesas } = getYearChartData(dashYearsSelected);
-
   if (chartRD) chartRD.destroy();
   chartRD = new Chart(ctx, {
     type: "bar",
@@ -354,49 +284,41 @@ function updateDashboardChart() {
       labels,
       datasets: [
         { label: "Receitas", backgroundColor: "#10b981", data: receitas },
-        { label: "Despesas", backgroundColor: "#ef4444", data: despesas },
-      ],
+        { label: "Despesas", backgroundColor: "#ef4444", data: despesas }
+      ]
     },
     options: {
       responsive: true,
       plugins: { legend: { position: "top" } },
-      scales: { y: { beginAtZero: true } },
-    },
+      scales: { y: { beginAtZero: true } }
+    }
   });
 }
 
 function updateDashboard() {
   const receitasPeriodo = filterByYearAndMonths(receitasCache, dashYearsSelected, dashMonthsSelected);
   const despesasPeriodo = filterByYearAndMonths(despesasCache, dashYearsSelected, dashMonthsSelected);
-
   const totalReceitasPeriodo = receitasPeriodo.reduce((sum, r) => sum + Number(r.amount_total || 0), 0);
   const totalDespesasPeriodo = despesasPeriodo.reduce((sum, d) => sum + Number(d.amount_total || 0), 0);
-
   const receitasAno = filterByYearAndMonths(receitasCache, dashYearsSelected, [1,2,3,4,5,6,7,8,9,10,11,12]);
   const despesasAno = filterByYearAndMonths(despesasCache, dashYearsSelected, [1,2,3,4,5,6,7,8,9,10,11,12]);
-
   const totalReceitasAno = receitasAno.reduce((sum, r) => sum + Number(r.amount_total || 0), 0);
   const totalDespesasAno = despesasAno.reduce((sum, d) => sum + Number(d.amount_total || 0), 0);
-
   const receitasPagas = receitasCache.filter((r) => r.payment_date).reduce((sum, r) => sum + Number(r.amount_total || 0), 0);
   const despesasPagas = despesasCache.filter((d) => d.payment_date).reduce((sum, d) => sum + Number(d.amount_total || 0), 0);
-
   const caixa = receitasPagas - despesasPagas;
   const caixaMensal = totalReceitasPeriodo - totalDespesasPeriodo;
   const fechamentoAnual = totalReceitasAno - totalDespesasAno;
-
   const elCaixa = document.getElementById("dash-total-receitas");
   const elCaixaMensal = document.getElementById("dash-total-despesas");
   const elFechAnual = document.getElementById("dash-saldo");
-
   if (elCaixa) elCaixa.textContent = formatCurrency(caixa);
   if (elCaixaMensal) elCaixaMensal.textContent = formatCurrency(caixaMensal);
   if (elFechAnual) elFechAnual.textContent = formatCurrency(fechamentoAnual);
-
   updateDashboardChart();
 }
 
-// Receitas / Despesas
+// Receitas/Despesas
 async function loadReceitas() {
   const tbody = document.querySelector("#table-receitas tbody");
   renderTablePlaceholder(tbody, "Carregando receitas...");
@@ -406,7 +328,6 @@ async function loadReceitas() {
   } catch (err) {
     console.error(err);
     renderTablePlaceholder(tbody, "Erro ao carregar receitas.");
-    alert("Não foi possível carregar as receitas. Verifique sua conexão.");
   } finally {
     buildYearFilterOptions();
     updateDashboard();
@@ -418,13 +339,11 @@ function renderReceitasTable() {
   const tbody = document.querySelector("#table-receitas tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
-
   const list = applyFilters(receitasCache, receitaFilters);
   if (!list.length) {
     renderTablePlaceholder(tbody, "Nenhuma receita encontrada.");
     return;
   }
-
   list.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -449,7 +368,6 @@ async function loadDespesas() {
   } catch (err) {
     console.error(err);
     renderTablePlaceholder(tbody, "Erro ao carregar despesas.");
-    alert("Não foi possível carregar as despesas. Verifique sua conexão.");
   } finally {
     buildYearFilterOptions();
     updateDashboard();
@@ -461,13 +379,11 @@ function renderDespesasTable() {
   const tbody = document.querySelector("#table-despesas tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
-
   const list = applyFilters(despesasCache, despesaFilters);
   if (!list.length) {
     renderTablePlaceholder(tbody, "Nenhuma despesa encontrada.");
     return;
   }
-
   list.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -495,7 +411,6 @@ async function loadCartoes() {
   } catch (err) {
     console.error(err);
     renderTablePlaceholder(tbody, "Erro ao carregar cartões.");
-    alert("Não foi possível carregar os cartões. Verifique sua conexão.");
   } finally {
     updateActionButtons();
   }
@@ -505,15 +420,12 @@ function renderCartoesTable() {
   const tbody = document.querySelector("#table-cartoes tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
-
   if (!cartoesCache.length) {
     renderTablePlaceholder(tbody, "Nenhum cartão cadastrado.");
     return;
   }
-
   cartoesCache.forEach((card) => {
     const initials = (card.name || "CC").trim().slice(0, 2).toUpperCase();
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="checkbox" class="row-select row-select-cartao" data-id="${card.id}" /></td>
@@ -556,7 +468,6 @@ async function loadTransacoesCartao() {
   } catch (err) {
     console.error(err);
     renderTablePlaceholder(tbody, "Erro ao carregar lançamentos.");
-    alert("Não foi possível carregar os lançamentos de cartão.");
   } finally {
     updateCardCharts();
     updateActionButtons();
@@ -567,17 +478,14 @@ function renderTransacoesCartaoTable() {
   const tbody = document.querySelector("#table-transacoes-cartao tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
-
   const list = applyFilters(transacoesCartaoCache, transacaoCartaoFilters, (item) => {
     const cartao = cartoesCache.find((c) => c.id === item.card_id);
     return { ...item, cartao: cartao ? cartao.name : "" };
   });
-
   if (!list.length) {
     renderTablePlaceholder(tbody, "Nenhum lançamento de cartão.");
     return;
   }
-
   list.forEach((item) => {
     const cartao = cartoesCache.find((c) => c.id === item.card_id);
     const nome = cartao ? cartao.name : `#${item.card_id}`;
@@ -600,40 +508,28 @@ function updateCardCharts() {
   const gastoCanvas = document.getElementById("chart-gasto-cartao");
   const limiteCanvas = document.getElementById("chart-limite-cartao");
   if (!gastoCanvas || !limiteCanvas) return;
-
   const gastos = new Map();
   cartoesCache.forEach((card) => gastos.set(card.id, 0));
-
   transacoesCartaoCache.forEach((trx) => {
     if (!gastos.has(trx.card_id)) return;
     const valor = Number(trx.amount_installment || trx.amount_total || 0);
     gastos.set(trx.card_id, gastos.get(trx.card_id) + valor);
   });
-
   const labels = cartoesCache.map((card) => card.name);
   const gastoData = cartoesCache.map((card) => gastos.get(card.id) || 0);
   const limiteData = cartoesCache.map((card) => Number(card.limit_value || 0));
   const disponivelData = limiteData.map((lim, idx) => Math.max(lim - gastoData[idx], 0));
-
   if (chartGastoCartao) chartGastoCartao.destroy();
   if (chartLimiteCartao) chartLimiteCartao.destroy();
-
   chartGastoCartao = new Chart(gastoCanvas.getContext("2d"), {
     type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Gasto", data: gastoData, backgroundColor: "#6366f1" }],
-    },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    data: { labels, datasets: [{ label: "Gasto", data: gastoData, backgroundColor: "#6366f1" }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
-
   chartLimiteCartao = new Chart(limiteCanvas.getContext("2d"), {
     type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Limite disponível", data: disponivelData, backgroundColor: "#0ea5e9" }],
-    },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    data: { labels, datasets: [{ label: "Limite disponível", data: disponivelData, backgroundColor: "#0ea5e9" }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
 }
 
@@ -644,7 +540,6 @@ function setupNavigation() {
       const target = btn.dataset.page;
       document.querySelectorAll(".menu-item").forEach((item) => item.classList.remove("active"));
       btn.classList.add("active");
-
       document.querySelectorAll(".page").forEach((section) => {
         section.classList.toggle("visible", section.id === `page-${target}`);
       });
@@ -659,26 +554,19 @@ function setupFilters() {
     const table = target.dataset.table;
     const store = getFiltersStore(table);
     if (!store) return;
-
     const field = target.dataset.field;
     const filterType = target.dataset.filterType || "text";
     let key = field;
     if (filterType === "date-from") key = `${field}_from`;
     if (filterType === "date-to") key = `${field}_to`;
     if (filterType === "number-min") key = `${field}_min`;
-
-    if (target.value) {
-      store[key] = target.value;
-    } else {
-      delete store[key];
-    }
+    if (target.value) store[key] = target.value;
+    else delete store[key];
     updateFilterInputVisual(target);
     rerenderTable(table);
   };
-
   document.addEventListener("input", handleFilterChange);
   document.addEventListener("change", handleFilterChange);
-
   document.addEventListener("click", (event) => {
     const button = event.target.closest(".btn-clear-filters");
     if (!button) return;
@@ -691,16 +579,13 @@ function setupSelectAllToggles() {
     { id: "chk-all-receitas", selector: "#table-receitas tbody .row-select-receita" },
     { id: "chk-all-despesas", selector: "#table-despesas tbody .row-select-despesa" },
     { id: "chk-all-cartoes", selector: "#table-cartoes tbody .row-select-cartao" },
-    { id: "chk-all-transacoes-cartao", selector: "#table-transacoes-cartao tbody .row-select-transacao-cartao" },
+    { id: "chk-all-transacoes-cartao", selector: "#table-transacoes-cartao tbody .row-select-transacao-cartao" }
   ];
-
   configs.forEach(({ id, selector }) => {
     const checkbox = document.getElementById(id);
     if (!checkbox) return;
     checkbox.addEventListener("change", () => {
-      document.querySelectorAll(selector).forEach((cb) => {
-        cb.checked = checkbox.checked;
-      });
+      document.querySelectorAll(selector).forEach((cb) => { cb.checked = checkbox.checked; });
       updateActionButtons();
     });
   });
@@ -719,7 +604,6 @@ function setupDashboardFilterControls() {
       dashYearsSelected.sort((a, b) => a - b);
       updateDashboard();
     }
-
     if (target.classList.contains("filter-checkbox-month")) {
       const value = parseInt(target.value, 10);
       if (target.checked) {
@@ -735,8 +619,7 @@ function setupDashboardFilterControls() {
 
 function setupGlobalSelectionWatcher() {
   document.addEventListener("change", (event) => {
-    const target = event.target;
-    if (target.classList.contains("row-select")) {
+    if (event.target.classList.contains("row-select")) {
       updateActionButtons();
       highlightSelectedRows();
     }
@@ -750,13 +633,36 @@ function setupButtonActions() {
     entityLabel: "receita",
     apiPathBuilder: (id) => `${API_BASE}/api/receitas/${id}`,
     reloadFns: [loadReceitas],
-    successMessage: "{n} receita(s) excluída(s)!",
+    successMessage: "{n} receita(s) excluída(s)!"
   });
-
   setupBulkDeleteButton({
     buttonId: "btn-delete-despesa",
     tableId: "table-despesas",
     entityLabel: "despesa",
     apiPathBuilder: (id) => `${API_BASE}/api/despesas/${id}`,
     reloadFns: [loadDespesas],
-    successMessage: "{n} despesa(
+    successMessage: "{n} despesa(s) excluída(s)!"
+  });
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-transacao-cartao",
+    tableId: "table-transacoes-cartao",
+    entityLabel: "lançamento",
+    apiPathBuilder: (id) => `${API_BASE}/api/transacoes-cartao/${id}`,
+    reloadFns: [loadTransacoesCartao],
+    successMessage: "{n} lançamento(s) excluído(s)!"
+  });
+  setupBulkDeleteButton({
+    buttonId: "btn-delete-cartao",
+    tableId: "table-cartoes",
+    entityLabel: "cartão",
+    apiPathBuilder: (id) => `${API_BASE}/api/cartoes/${id}`,
+    reloadFns: [loadCartoes, loadTransacoesCartao],
+    successMessage: "{n} cartão(ões) excluído(s)!"
+  });
+  
+  const btnEditReceita = document.getElementById("btn-edit-receita");
+  if (btnEditReceita) {
+    btnEditReceita.addEventListener("click", () => {
+      const ids = getSelectedIdsFromTable("table-receitas");
+      if (!requireSingleSelection(ids, "receita")) return;
+      const item = receitasCache
