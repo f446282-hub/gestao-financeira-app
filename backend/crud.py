@@ -9,7 +9,7 @@ from . import models, schemas
 # ---------- REVENUES ----------
 
 def create_revenue(db: Session, data: schemas.RevenueCreate) -> models.Revenue:
-    revenue = models.Revenue(**data.dict())
+    revenue = models.Revenue(**data.model_dump())
     db.add(revenue)
     db.commit()
     db.refresh(revenue)
@@ -28,7 +28,7 @@ def update_revenue(db: Session, revenue_id: int, data: schemas.RevenueUpdate) ->
     revenue = get_revenue(db, revenue_id)
     if not revenue:
         return None
-    for field, value in data.dict().items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(revenue, field, value)
     db.commit()
     db.refresh(revenue)
@@ -47,7 +47,7 @@ def delete_revenue(db: Session, revenue_id: int) -> bool:
 # ---------- EXPENSES ----------
 
 def create_expense(db: Session, data: schemas.ExpenseCreate) -> models.Expense:
-    expense = models.Expense(**data.dict())
+    expense = models.Expense(**data.model_dump())
     db.add(expense)
     db.commit()
     db.refresh(expense)
@@ -66,7 +66,7 @@ def update_expense(db: Session, expense_id: int, data: schemas.ExpenseUpdate) ->
     expense = get_expense(db, expense_id)
     if not expense:
         return None
-    for field, value in data.dict().items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(expense, field, value)
     db.commit()
     db.refresh(expense)
@@ -75,7 +75,7 @@ def update_expense(db: Session, expense_id: int, data: schemas.ExpenseUpdate) ->
 
 def delete_expense(db: Session, expense_id: int) -> bool:
     expense = get_expense(db, expense_id)
-    if not expense:
+    if not hero:
         return False
     db.delete(expense)
     db.commit()
@@ -85,7 +85,7 @@ def delete_expense(db: Session, expense_id: int) -> bool:
 # ---------- CREDIT CARDS ----------
 
 def create_credit_card(db: Session, data: schemas.CreditCardCreate) -> models.CreditCard:
-    card = models.CreditCard(**data.dict())
+    card = models.CreditCard(**data.model_dump())
     db.add(card)
     db.commit()
     db.refresh(card)
@@ -104,7 +104,7 @@ def update_credit_card(db: Session, card_id: int, data: schemas.CreditCardUpdate
     card = get_credit_card(db, card_id)
     if not card:
         return None
-    for field, value in data.dict().items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(card, field, value)
     db.commit()
     db.refresh(card)
@@ -125,7 +125,7 @@ def delete_credit_card(db: Session, card_id: int) -> bool:
 def create_credit_card_transaction(
     db: Session, data: schemas.CreditCardTransactionCreate
 ) -> models.CreditCardTransaction:
-    tx = models.CreditCardTransaction(**data.dict())
+    tx = models.CreditCardTransaction(**data.model_dump())
     db.add(tx)
     db.commit()
     db.refresh(tx)
@@ -156,7 +156,7 @@ def update_credit_card_transaction(
     tx = get_credit_card_transaction(db, tx_id)
     if not tx:
         return None
-    for field, value in data.dict().items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(tx, field, value)
     db.commit()
     db.refresh(tx)
