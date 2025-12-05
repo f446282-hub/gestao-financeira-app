@@ -666,3 +666,121 @@ function setupButtonActions() {
       const ids = getSelectedIdsFromTable("table-receitas");
       if (!requireSingleSelection(ids, "receita")) return;
       const item = receitasCache
+s) excluída(s)!"
+  });
+
+  const btnEditReceita = document.getElementById("btn-edit-receita");
+  if (btnEditReceita) {
+    btnEditReceita.addEventListener("click", () => {
+      alert("Funcionalidade de edição será implementada em breve!");
+    });
+  }
+  
+  const btnEditDespesa = document.getElementById("btn-edit-despesa");
+  if (btnEditDespesa) {
+    btnEditDespesa.addEventListener("click", () => {
+      alert("Funcionalidade de edição será implementada em breve!");
+    });
+  }
+  
+  const btnEditCartao = document.getElementById("btn-edit-cartao");
+  if (btnEditCartao) {
+    btnEditCartao.addEventListener("click", () => {
+      alert("Funcionalidade de edição será implementada em breve!");
+    });
+  }
+}
+
+function setupForms() {
+  const formReceita = document.getElementById("form-receita");
+  if (formReceita) {
+    formReceita.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formReceita);
+      try {
+        await fetchJSON(`${API_BASE}/api/receitas`, { method: "POST", body: JSON.stringify(payload) });
+        formReceita.reset();
+        await loadReceitas();
+        alert("Receita cadastrada com sucesso!");
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao salvar receita.");
+      }
+    });
+  }
+
+  const formDespesa = document.getElementById("form-despesa");
+  if (formDespesa) {
+    formDespesa.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formDespesa);
+      try {
+        await fetchJSON(`${API_BASE}/api/despesas`, { method: "POST", body: JSON.stringify(payload) });
+        formDespesa.reset();
+        await loadDespesas();
+        alert("Despesa cadastrada com sucesso!");
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao salvar despesa.");
+      }
+    });
+  }
+
+  const formCartao = document.getElementById("form-cartao");
+  if (formCartao) {
+    formCartao.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formCartao);
+      try {
+        await fetchJSON(`${API_BASE}/api/cartoes`, { method: "POST", body: JSON.stringify(payload) });
+        formCartao.reset();
+        await loadCartoes();
+        alert("Cartão cadastrado com sucesso!");
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao salvar cartão.");
+      }
+    });
+  }
+
+  const formTransacao = document.getElementById("form-transacao-cartao");
+  if (formTransacao) {
+    formTransacao.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = serializeForm(formTransacao);
+      payload.due_date = payload.purchase_date;
+      try {
+        await fetchJSON(`${API_BASE}/api/transacoes-cartao`, { method: "POST", body: JSON.stringify(payload) });
+        formTransacao.reset();
+        await loadTransacoesCartao();
+        alert("Lançamento cadastrado com sucesso!");
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao salvar transação.");
+      }
+    });
+  }
+}
+
+function updateActionButtons() {
+  const btnEditReceita = document.getElementById("btn-edit-receita");
+  const btnDelReceita = document.getElementById("btn-delete-receita");
+  const btnEditDespesa = document.getElementById("btn-edit-despesa");
+  const btnDelDespesa = document.getElementById("btn-delete-despesa");
+  const btnDelTrans = document.getElementById("btn-delete-transacao-cartao");
+  const btnEditCartao = document.getElementById("btn-edit-cartao");
+  const btnDelCartao = document.getElementById("btn-delete-cartao");
+
+  const selReceitas = getSelectedIdsFromTable("table-receitas");
+  const selDespesas = getSelectedIdsFromTable("table-despesas");
+  const selCartoes = getSelectedIdsFromTable("table-cartoes");
+  const selTrans = getSelectedIdsFromTable("table-transacoes-cartao");
+
+  if (btnEditReceita) btnEditReceita.disabled = selReceitas.length !== 1;
+  if (btnDelReceita) btnDelReceita.disabled = selReceitas.length === 0;
+  if (btnEditDespesa) btnEditDespesa.disabled = selDespesas.length !== 1;
+  if (btnDelDespesa) btnDelDespesa.disabled = selDespesas.length === 0;
+  if (btnEditCartao) btnEditCartao.disabled = selCartoes.length !== 1;
+  if (btnDelCartao) btnDelCartao.disabled = selCartoes.length === 0;
+  if (btnDelTrans) btnDelTrans.disabled = selTrans.length === 0;
+}
