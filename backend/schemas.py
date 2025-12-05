@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # ---------- REVENUE ----------
@@ -29,9 +29,8 @@ class RevenueUpdate(RevenueBase):
 
 class RevenueOut(RevenueBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- EXPENSE ----------
@@ -58,9 +57,8 @@ class ExpenseUpdate(ExpenseBase):
 
 class ExpenseOut(ExpenseBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- CREDIT CARD ----------
@@ -85,9 +83,8 @@ class CreditCardUpdate(CreditCardBase):
 
 class CreditCardOut(CreditCardBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- CREDIT CARD TRANSACTION ----------
@@ -115,6 +112,5 @@ class CreditCardTransactionUpdate(CreditCardTransactionBase):
 
 class CreditCardTransactionOut(CreditCardTransactionBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    
+    model_config = ConfigDict(from_attributes=True)
